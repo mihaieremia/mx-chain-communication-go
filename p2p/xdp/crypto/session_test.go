@@ -123,18 +123,20 @@ func TestSession_RotateKey(t *testing.T) {
 	session := NewSession("peer", originalKey, "addr")
 
 	// Generate some sequence numbers
-	session.NextSendSeqNo()
-	session.NextSendSeqNo()
+	session.NextSendSeqNo() // SendSeqNo becomes 1
+	session.NextSendSeqNo() // SendSeqNo becomes 2
 	session.UpdateRecvSeqNo(100)
 
 	// Rotate key
 	newKey := []byte("new-rotated-key")
 	session.RotateKey(newKey)
 
-	// Verify key changed and sequences reset
+	// Verify key changed but sequence numbers are preserved (monotonically increasing).
+	// Resetting sequence numbers would allow replayed pre-rotation messages to pass
+	// the sequence check after the key change.
 	assert.Equal(t, newKey, session.GetSharedKey())
-	assert.Equal(t, uint64(0), session.SendSeqNo)
-	assert.Equal(t, uint64(0), session.RecvSeqNo)
+	assert.Equal(t, uint64(2), session.SendSeqNo)
+	assert.Equal(t, uint64(100), session.RecvSeqNo)
 }
 
 func TestSession_IsExpired(t *testing.T) {

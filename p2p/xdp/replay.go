@@ -48,8 +48,9 @@ type peerSeqState struct {
 	lastSeen  time.Time
 }
 
-// IsValid checks if a message is valid (not a replay)
-func (rp *ReplayProtector) IsValid(peerID [32]byte, seqNo uint64, timestamp int64) error {
+// isValidLocked checks if a message is valid (not a replay).
+// Caller must hold at least rp.mu.RLock().
+func (rp *ReplayProtector) isValidLocked(peerID [32]byte, seqNo uint64, timestamp int64) error {
 	// Check timestamp window
 	now := time.Now().Unix()
 
@@ -86,8 +87,9 @@ func (rp *ReplayProtector) IsValid(peerID [32]byte, seqNo uint64, timestamp int6
 	return nil
 }
 
-// RecordMessage records a message as seen
-func (rp *ReplayProtector) RecordMessage(peerID [32]byte, seqNo uint64) {
+// recordMessageLocked records a message as seen.
+// Caller must hold rp.mu.Lock() (write lock).
+func (rp *ReplayProtector) recordMessageLocked(peerID [32]byte, seqNo uint64) {
 	// Add to seen messages cache
 	key := messageKey{peerID: peerID, seqNo: seqNo}
 	rp.seenMessages.Add(key, struct{}{})
@@ -142,14 +144,36 @@ func (rp *ReplayProtector) RecordMessage(peerID [32]byte, seqNo uint64) {
 	}
 }
 
-// ValidateAndRecord validates a message and records it if valid
+// IsValid checks if a message is valid (not a replay).
+// This acquires a read lock and is safe for concurrent use by direct callers.
+func (rp *ReplayProtector) IsValid(peerID [32]byte, seqNo uint64, timestamp int64) error {
+	rp.mu.RLock()
+	defer rp.mu.RUnlock()
+
+	return rp.isValidLocked(peerID, seqNo, timestamp)
+}
+
+// RecordMessage records a message as seen.
+// This acquires a write lock and is safe for concurrent use by direct callers.
+func (rp *ReplayProtector) RecordMessage(peerID [32]byte, seqNo uint64) {
+	rp.mu.Lock()
+	defer rp.mu.Unlock()
+
+	rp.recordMessageLocked(peerID, seqNo)
+}
+
+// ValidateAndRecord validates a message and records it if valid.
+// The check-and-record is performed atomically under a write lock to prevent
+// TOCTOU races between concurrent receiver workers.
 func (rp *ReplayProtector) ValidateAndRecord(peerID [32]byte, seqNo uint64, timestamp int64) error {
-	err := rp.IsValid(peerID, seqNo, timestamp)
-	if err != nil {
+	rp.mu.Lock()
+	defer rp.mu.Unlock()
+
+	if err := rp.isValidLocked(peerID, seqNo, timestamp); err != nil {
 		return err
 	}
 
-	rp.RecordMessage(peerID, seqNo)
+	rp.recordMessageLocked(peerID, seqNo)
 	return nil
 }
 
@@ -174,7 +198,7 @@ func (rp *ReplayProtector) ClearPeer(peerID [32]byte) {
 
 // Stats returns replay protection statistics
 type ReplayStats struct {
-	CacheSize   int
+	CacheSize    int
 	PeersTracked int
 }
 
@@ -187,7 +211,7 @@ func (rp *ReplayProtector) GetStats() ReplayStats {
 	})
 
 	return ReplayStats{
-		CacheSize:   rp.seenMessages.Len(),
+		CacheSize:    rp.seenMessages.Len(),
 		PeersTracked: peerCount,
 	}
 }

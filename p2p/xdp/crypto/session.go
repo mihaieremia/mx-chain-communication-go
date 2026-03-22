@@ -84,14 +84,15 @@ func (s *Session) GetSharedKey() []byte {
 	return key
 }
 
-// RotateKey rotates the session key with a new shared key
+// RotateKey rotates the session key with a new shared key.
+// Sequence numbers are intentionally NOT reset so they remain monotonically
+// increasing across rotations. Resetting them would allow replayed pre-rotation
+// messages to pass the sequence check after the key change.
 func (s *Session) RotateKey(newKey []byte) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.SharedKey = newKey
-	s.SendSeqNo = 0
-	s.RecvSeqNo = 0
 }
 
 // IsExpired checks if the session is expired based on the given max age
