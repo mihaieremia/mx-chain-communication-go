@@ -3,6 +3,7 @@ package xdp
 import (
 	"encoding/binary"
 	"hash/fnv"
+	"sync"
 	"time"
 )
 
@@ -287,6 +288,7 @@ func TopicToID(topic string) uint16 {
 
 // TopicRegistry maintains bidirectional mapping between topics and IDs
 type TopicRegistry struct {
+	mu       sync.RWMutex
 	byID     map[uint16]string
 	byString map[string]uint16
 }
@@ -301,6 +303,9 @@ func NewTopicRegistry() *TopicRegistry {
 
 // Register registers a topic and returns its ID
 func (r *TopicRegistry) Register(topic string) uint16 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	if id, ok := r.byString[topic]; ok {
 		return id
 	}
@@ -313,12 +318,18 @@ func (r *TopicRegistry) Register(topic string) uint16 {
 
 // GetTopic returns the topic for a given ID
 func (r *TopicRegistry) GetTopic(id uint16) (string, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	topic, ok := r.byID[id]
 	return topic, ok
 }
 
 // GetID returns the ID for a given topic
 func (r *TopicRegistry) GetID(topic string) (uint16, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	id, ok := r.byString[topic]
 	return id, ok
 }
