@@ -7,6 +7,7 @@ import (
 	"net"
 
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/link"
 	"golang.org/x/sys/unix"
 )
@@ -57,7 +58,7 @@ type XDPProgram struct {
 // XDPProgramSpec defines the XDP program specification for loading
 type XDPProgramSpec struct {
 	// Program bytecode (eBPF instructions)
-	Instructions ebpf.Instructions
+	Instructions asm.Instructions
 
 	// XSKMAP specification
 	XSKMapSpec *ebpf.MapSpec
@@ -123,50 +124,50 @@ func NewXDPProgram(ifname string, mode XDPMode) (*XDPProgram, error) {
 // 2. Looks up the queue in XSKMAP
 // 3. If found, redirects to the AF_XDP socket
 // 4. Otherwise, passes the packet to the kernel
-func buildXDPRedirectProgram(xskMapFd int) ebpf.Instructions {
+func buildXDPRedirectProgram(xskMapFd int) asm.Instructions {
 	// eBPF instruction builder
 	// This is the equivalent of the C program above
-	return ebpf.Instructions{
+	return asm.Instructions{
 		// r6 = ctx
-		ebpf.Mov.Reg(ebpf.R6, ebpf.R1),
+		asm.Mov.Reg(asm.R6, asm.R1),
 
 		// r1 = ctx->rx_queue_index (offset 16 in xdp_md)
-		ebpf.LoadMem(ebpf.R1, ebpf.R6, 16, ebpf.Word),
+		asm.LoadMem(asm.R1, asm.R6, 16, asm.Word),
 
 		// Store queue index on stack (for map lookup)
-		ebpf.StoreMem(ebpf.RFP, -4, ebpf.R1, ebpf.Word),
+		asm.StoreMem(asm.RFP, -4, asm.R1, asm.Word),
 
 		// r2 = &queue_index (stack pointer)
-		ebpf.Mov.Reg(ebpf.R2, ebpf.RFP),
-		ebpf.Add.Imm(ebpf.R2, -4),
+		asm.Mov.Reg(asm.R2, asm.RFP),
+		asm.Add.Imm(asm.R2, -4),
 
 		// r1 = xsks_map fd (map lookup arg)
-		ebpf.LoadMapPtr(ebpf.R1, xskMapFd),
+		asm.LoadMapPtr(asm.R1, xskMapFd),
 
 		// call bpf_map_lookup_elem
-		ebpf.BuiltinFunc(ebpf.FnMapLookupElem).Call(),
+		asm.BuiltinFunc(asm.FnMapLookupElem).Call(),
 
 		// if (r0 == NULL) goto pass
-		ebpf.JEq.Imm(ebpf.R0, 0, "pass"),
+		asm.JEq.Imm(asm.R0, 0, "pass"),
 
 		// r2 = ctx->rx_queue_index (redirect index)
-		ebpf.LoadMem(ebpf.R2, ebpf.R6, 16, ebpf.Word),
+		asm.LoadMem(asm.R2, asm.R6, 16, asm.Word),
 
 		// r3 = XDP_PASS (fallback action)
-		ebpf.Mov.Imm(ebpf.R3, XDP_PASS),
+		asm.Mov.Imm(asm.R3, XDP_PASS),
 
 		// r1 = xsks_map fd
-		ebpf.LoadMapPtr(ebpf.R1, xskMapFd),
+		asm.LoadMapPtr(asm.R1, xskMapFd),
 
 		// call bpf_redirect_map
-		ebpf.BuiltinFunc(ebpf.FnRedirectMap).Call(),
+		asm.BuiltinFunc(asm.FnRedirectMap).Call(),
 
 		// return r0 (redirect result)
-		ebpf.Return(),
+		asm.Return(),
 
 		// pass: return XDP_PASS
-		ebpf.Mov.Imm(ebpf.R0, XDP_PASS).WithSymbol("pass"),
-		ebpf.Return(),
+		asm.Mov.Imm(asm.R0, XDP_PASS).WithSymbol("pass"),
+		asm.Return(),
 	}
 }
 

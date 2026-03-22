@@ -379,7 +379,7 @@ func (s *Socket) reclaimTxFrames() {
 
 // wakeup wakes up the kernel (for NEED_WAKEUP mode)
 func (s *Socket) wakeup() error {
-	_, err := unix.Sendto(s.fd, nil, unix.MSG_DONTWAIT, nil)
+	err := unix.Sendto(s.fd, nil, unix.MSG_DONTWAIT, nil)
 	if err != nil && err != unix.EAGAIN && err != unix.ENOBUFS {
 		return fmt.Errorf("wakeup sendto failed: %w", err)
 	}
