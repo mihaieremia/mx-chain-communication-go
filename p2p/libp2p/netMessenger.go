@@ -3,6 +3,7 @@ package libp2p
 import (
 	"context"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	quic "github.com/libp2p/go-libp2p/p2p/transport/quic"
+	"github.com/libp2p/go-libp2p/p2p/transport/quicreuse"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	ws "github.com/libp2p/go-libp2p/p2p/transport/websocket"
 	webtransport "github.com/libp2p/go-libp2p/p2p/transport/webtransport"
@@ -24,6 +26,7 @@ import (
 	"github.com/multiversx/mx-chain-communication-go/p2p/libp2p/networksharding/factory"
 	"github.com/multiversx/mx-chain-communication-go/p2p/libp2p/resourceLimiter"
 	"github.com/multiversx/mx-chain-communication-go/p2p/xdp"
+	"github.com/multiversx/mx-chain-communication-go/p2p/xdp/accel"
 	"github.com/multiversx/mx-chain-core-go/core"
 	"github.com/multiversx/mx-chain-core-go/core/check"
 	"github.com/multiversx/mx-chain-core-go/core/throttler"
@@ -194,6 +197,23 @@ func constructNode(
 		libp2p.DisableRelay(),
 		libp2p.NATPortMap(),
 		resourceLimiterOption,
+	}
+	// If XDP QUIC acceleration is enabled, override UDP socket creation
+	// to use AF_XDP kernel bypass for all QUIC traffic
+	if args.P2pConfig.XDP.AccelerateQUIC && len(args.P2pConfig.Node.Transports.QUICAddress) > 0 {
+		xdpCfg := xdp.Config{
+			Interface:  args.P2pConfig.XDP.Interface,
+			UseRealXDP: true,
+			QueueSize:  args.P2pConfig.XDP.QueueSize,
+			BatchSize:  args.P2pConfig.XDP.BatchSize,
+		}
+		listenUDP := accel.NewListenUDP(xdpCfg, args.Logger)
+		options = append(options, libp2p.QUICReuse(
+			quicreuse.NewConnManager,
+			quicreuse.OverrideListenUDP(func(network string, laddr *net.UDPAddr) (net.PacketConn, error) {
+				return listenUDP(network, laddr)
+			}),
+		))
 	}
 	options = append(options, transportOptions...)
 
