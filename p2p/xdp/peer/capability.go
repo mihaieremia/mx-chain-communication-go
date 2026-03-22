@@ -22,7 +22,7 @@ const (
 	XDPCapabilityProtocolID = protocol.ID("/mvx/xdp/capability/1.0.0")
 
 	// CapabilityExchangeTimeout is the timeout for capability exchange
-	CapabilityExchangeTimeout = 10 * time.Second
+	CapabilityExchangeTimeout = 30 * time.Second
 
 	// MaxCapabilityMessageSize is the maximum size of a capability message
 	MaxCapabilityMessageSize = 1024
@@ -137,6 +137,10 @@ func (ch *CapabilityHandler) SetCapabilityCallback(cb func(peerID core.PeerID, c
 // handleStream handles incoming capability exchange streams
 func (ch *CapabilityHandler) handleStream(s network.Stream) {
 	defer s.Close()
+
+	if err := s.SetDeadline(time.Now().Add(CapabilityExchangeTimeout)); err != nil {
+		ch.log.Trace("failed to set stream deadline", "error", err)
+	}
 
 	remotePeerID := s.Conn().RemotePeer()
 

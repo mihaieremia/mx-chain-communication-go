@@ -34,8 +34,11 @@ type AFXDPSocket struct {
 	arpMu    sync.RWMutex
 
 	// Receive handling
-	rxChan   chan *receivedData
-	rxClosed atomic.Bool
+	rxChan chan *receivedData
+
+	// done is closed when the socket is shutting down; used by Receive() to
+	// unblock without closing rxChan from a concurrent writer.
+	done chan struct{}
 
 	// State
 	closed atomic.Bool
@@ -137,6 +140,7 @@ func NewAFXDPSocket(config Config, log p2p.Logger) (*AFXDPSocket, error) {
 		srcMAC:   srcMAC,
 		arpCache: make(map[string]net.HardwareAddr),
 		rxChan:   make(chan *receivedData, config.QueueSize),
+		done:     make(chan struct{}),
 		log:      log,
 	}
 
@@ -160,8 +164,11 @@ func NewAFXDPSocket(config Config, log p2p.Logger) (*AFXDPSocket, error) {
 
 // handleReceive handles packets received from AF_XDP
 func (s *AFXDPSocket) handleReceive(queueID int, data []byte) {
-	if s.rxClosed.Load() {
+	// Check if socket is shutting down before doing any work.
+	select {
+	case <-s.done:
 		return
+	default:
 	}
 
 	// AF_XDP gives us raw ethernet frames.
@@ -181,10 +188,14 @@ func (s *AFXDPSocket) handleReceive(queueID int, data []byte) {
 
 	// Queue for receive. payload is a sub-slice of dataCopy, so it is
 	// safe to hold after the UMEM buffer is returned.
+	// Use a non-blocking send; if the socket is shutting down or the
+	// channel is full we drop the packet rather than blocking or panicking.
 	select {
 	case s.rxChan <- &receivedData{data: payload, addr: addr}:
+	case <-s.done:
+		// Socket shutting down; do not send to rxChan.
 	default:
-		// Queue full, drop packet
+		// Queue full, drop packet.
 		s.rxErrors.Add(1)
 	}
 }
@@ -464,14 +475,13 @@ func (s *AFXDPSocket) Receive(buf []byte) (int, *net.UDPAddr, error) {
 		return 0, nil, ErrSocketClosed
 	}
 
-	// Wait for received data
+	// Wait for received data or shutdown signal.
 	select {
-	case received, ok := <-s.rxChan:
-		if !ok {
-			return 0, nil, ErrSocketClosed
-		}
+	case received := <-s.rxChan:
 		n := copy(buf, received.data)
 		return n, received.addr, nil
+	case <-s.done:
+		return 0, nil, ErrSocketClosed
 	}
 }
 
@@ -498,9 +508,18 @@ func (s *AFXDPSocket) Close() error {
 		return nil // Already closed
 	}
 
-	s.rxClosed.Store(true)
-	close(s.rxChan)
+	// Stop the manager's receive workers first so that no more calls to
+	// handleReceive can happen before we signal shutdown.  This establishes
+	// a happens-before ordering and prevents any send-on-closed-channel panic.
+	if s.manager != nil {
+		s.manager.Stop()
+	}
 
+	// Signal shutdown to Receive() callers and any handleReceive goroutine
+	// that raced past the manager.Stop() barrier.
+	close(s.done)
+
+	// Fully release manager resources (sockets, XDP program, etc.)
 	if s.manager != nil {
 		return s.manager.Close()
 	}
