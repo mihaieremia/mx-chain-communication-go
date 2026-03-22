@@ -71,12 +71,13 @@ type ShardingConfig struct {
 
 // XDPConfig will hold XDP (eXpress Data Path) settings for high-performance networking
 type XDPConfig struct {
-	Enabled   bool
-	Port      uint16
-	Interface string
-	QueueSize uint32
-	BatchSize uint32
-	Security  XDPSecurityConfig
+	Enabled        bool
+	AccelerateQUIC bool
+	Port           uint16
+	Interface      string
+	QueueSize      uint32
+	BatchSize      uint32
+	Security       XDPSecurityConfig
 }
 
 // XDPSecurityConfig holds XDP security settings
