@@ -13,6 +13,7 @@ import (
 type ConnStub struct {
 	IDCalled              func() string
 	CloseCalled           func() error
+	CloseWithErrorCalled  func(errCode network.ConnErrorCode) error
 	LocalPeerCalled       func() peer.ID
 	LocalPrivateKeyCalled func() libp2pCrypto.PrivKey
 	RemotePeerCalled      func() peer.ID
@@ -39,6 +40,15 @@ func (cs *ConnStub) ID() string {
 // Close -
 func (cs *ConnStub) Close() error {
 	return cs.CloseCalled()
+}
+
+// CloseWithError -
+func (cs *ConnStub) CloseWithError(errCode network.ConnErrorCode) error {
+	if cs.CloseWithErrorCalled != nil {
+		return cs.CloseWithErrorCalled(errCode)
+	}
+
+	return nil
 }
 
 // LocalPeer -

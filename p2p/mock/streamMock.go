@@ -84,6 +84,16 @@ func (sm *streamMock) Reset() error {
 	return nil
 }
 
+// ResetWithError -
+func (sm *streamMock) ResetWithError(_ network.StreamErrorCode) error {
+	sm.mutData.Lock()
+	defer sm.mutData.Unlock()
+
+	sm.buffStream.Reset()
+	sm.canRead = false
+	return nil
+}
+
 // SetDeadline -
 func (sm *streamMock) SetDeadline(time.Time) error {
 	panic("implement me")
