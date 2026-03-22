@@ -50,10 +50,11 @@ type Engine struct {
 
 // EngineArgs holds arguments for creating an XDP engine
 type EngineArgs struct {
-	Config          config.XDPConfig
-	Host            host.Host
-	Marshaller      p2p.Marshaller
-	Logger          p2p.Logger
+	Config     config.XDPTransportConfig
+	Port       uint16 // Resolved port from global Node.Port range
+	Host       host.Host
+	Marshaller p2p.Marshaller
+	Logger     p2p.Logger
 }
 
 // NewEngine creates a new XDP engine
@@ -73,7 +74,7 @@ func NewEngine(args EngineArgs) (*Engine, error) {
 	// Convert config
 	xdpConfig := Config{
 		Enabled:   args.Config.Enabled,
-		Port:      args.Config.Port,
+		Port:      args.Port,
 		Interface: args.Config.Interface,
 		QueueSize: args.Config.QueueSize,
 		BatchSize: args.Config.BatchSize,

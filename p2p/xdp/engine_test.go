@@ -74,10 +74,10 @@ func TestNewEngine_Enabled(t *testing.T) {
 	args := EngineArgs{
 		Config: config.XDPConfig{
 			Enabled:   true,
-			Port:      getNextTestPort(),
 			QueueSize: 1024,
 			BatchSize: 32,
 		},
+		Port:   getNextTestPort(),
 		Logger: &mockEngineLogger{},
 	}
 
@@ -97,10 +97,10 @@ func TestEngine_StartStop(t *testing.T) {
 	args := EngineArgs{
 		Config: config.XDPConfig{
 			Enabled:   true,
-			Port:      getNextTestPort(),
 			QueueSize: 1024,
 			BatchSize: 32,
 		},
+		Port:   getNextTestPort(),
 		Logger: &mockEngineLogger{},
 	}
 
@@ -157,10 +157,10 @@ func TestEngine_Close(t *testing.T) {
 	args := EngineArgs{
 		Config: config.XDPConfig{
 			Enabled:   true,
-			Port:      getNextTestPort(),
 			QueueSize: 1024,
 			BatchSize: 32,
 		},
+		Port:   getNextTestPort(),
 		Logger: &mockEngineLogger{},
 	}
 
@@ -320,10 +320,10 @@ func TestEngine_GetComponents_Enabled(t *testing.T) {
 	args := EngineArgs{
 		Config: config.XDPConfig{
 			Enabled:   true,
-			Port:      getNextTestPort(),
 			QueueSize: 1024,
 			BatchSize: 32,
 		},
+		Port:   getNextTestPort(),
 		Logger: &mockEngineLogger{},
 	}
 
@@ -367,10 +367,10 @@ func TestEngine_SubscribeUnsubscribeTopic_Enabled(t *testing.T) {
 	args := EngineArgs{
 		Config: config.XDPConfig{
 			Enabled:   true,
-			Port:      getNextTestPort(),
 			QueueSize: 1024,
 			BatchSize: 32,
 		},
+		Port:   getNextTestPort(),
 		Logger: &mockEngineLogger{},
 	}
 
@@ -426,9 +426,9 @@ func TestEngine_ConfigDefaults(t *testing.T) {
 	args := EngineArgs{
 		Config: config.XDPConfig{
 			Enabled: true,
-			Port:    port, // Must specify port to avoid collision
 			// All other values are zero/default
 		},
+		Port:   port,
 		Logger: &mockEngineLogger{},
 	}
 
@@ -451,7 +451,6 @@ func TestEngine_ConfigFromXDPConfig(t *testing.T) {
 	args := EngineArgs{
 		Config: config.XDPConfig{
 			Enabled:   true,
-			Port:      getNextTestPort(),
 			Interface: "eth0",
 			QueueSize: 4096,
 			BatchSize: 128,
@@ -461,6 +460,7 @@ func TestEngine_ConfigFromXDPConfig(t *testing.T) {
 				TimestampToleranceSec:  120, // 2 minutes
 			},
 		},
+		Port:   getNextTestPort(),
 		Logger: &mockEngineLogger{},
 	}
 
@@ -482,10 +482,10 @@ func TestEngine_HasXDP_Enabled(t *testing.T) {
 	args := EngineArgs{
 		Config: config.XDPConfig{
 			Enabled:   true,
-			Port:      getNextTestPort(),
 			QueueSize: 1024,
 			BatchSize: 32,
 		},
+		Port:   getNextTestPort(),
 		Logger: &mockEngineLogger{},
 	}
 
@@ -503,10 +503,10 @@ func TestEngine_GetXDPPeers_Enabled(t *testing.T) {
 	args := EngineArgs{
 		Config: config.XDPConfig{
 			Enabled:   true,
-			Port:      getNextTestPort(),
 			QueueSize: 1024,
 			BatchSize: 32,
 		},
+		Port:   getNextTestPort(),
 		Logger: &mockEngineLogger{},
 	}
 
@@ -540,8 +540,8 @@ func BenchmarkEngine_IsEnabled(b *testing.B) {
 	args := EngineArgs{
 		Config: config.XDPConfig{
 			Enabled: true,
-			Port:    getNextTestPort(),
 		},
+		Port:   getNextTestPort(),
 		Logger: &mockEngineLogger{},
 	}
 
@@ -558,8 +558,8 @@ func BenchmarkEngine_HasXDP(b *testing.B) {
 	args := EngineArgs{
 		Config: config.XDPConfig{
 			Enabled: true,
-			Port:    getNextTestPort(),
 		},
+		Port:   getNextTestPort(),
 		Logger: &mockEngineLogger{},
 	}
 

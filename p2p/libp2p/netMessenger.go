@@ -200,12 +200,12 @@ func constructNode(
 	}
 	// If XDP QUIC acceleration is enabled, override UDP socket creation
 	// to use AF_XDP kernel bypass for all QUIC traffic
-	if args.P2pConfig.XDP.AccelerateQUIC && len(args.P2pConfig.Node.Transports.QUICAddress) > 0 {
+	if args.P2pConfig.Node.Transports.XDP.AccelerateQUIC && len(args.P2pConfig.Node.Transports.QUICAddress) > 0 {
 		xdpCfg := xdp.Config{
-			Interface:  args.P2pConfig.XDP.Interface,
+			Interface:  args.P2pConfig.Node.Transports.XDP.Interface,
 			UseRealXDP: true,
-			QueueSize:  args.P2pConfig.XDP.QueueSize,
-			BatchSize:  args.P2pConfig.XDP.BatchSize,
+			QueueSize:  args.P2pConfig.Node.Transports.XDP.QueueSize,
+			BatchSize:  args.P2pConfig.Node.Transports.XDP.BatchSize,
 		}
 		listenUDP := accel.NewListenUDP(xdpCfg, args.Logger)
 		options = append(options, libp2p.QUICReuse(
@@ -442,7 +442,8 @@ func addComponentsToNode(
 
 	// Initialize XDP engine for high-performance networking
 	xdpArgs := xdp.EngineArgs{
-		Config:     args.P2pConfig.XDP,
+		Config:     args.P2pConfig.Node.Transports.XDP,
+		Port:       uint16(p2pNode.port),
 		Host:       p2pNode.p2pHost,
 		Marshaller: marshaller,
 		Logger:     p2pNode.log,

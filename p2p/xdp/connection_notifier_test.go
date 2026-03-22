@@ -14,10 +14,10 @@ func TestNewConnectionNotifier(t *testing.T) {
 	args := EngineArgs{
 		Config: config.XDPConfig{
 			Enabled:   true,
-			Port:      getNextTestPort(),
 			QueueSize: 1024,
 			BatchSize: 32,
 		},
+		Port:   getNextTestPort(),
 		Logger: &mockEngineLogger{},
 	}
 
@@ -82,10 +82,10 @@ func TestConnectionNotifier_Close(t *testing.T) {
 	args := EngineArgs{
 		Config: config.XDPConfig{
 			Enabled:   true,
-			Port:      getNextTestPort(),
 			QueueSize: 1024,
 			BatchSize: 32,
 		},
+		Port:   getNextTestPort(),
 		Logger: &mockEngineLogger{},
 	}
 
@@ -111,10 +111,10 @@ func TestConnectionNotifier_ListenMethods(t *testing.T) {
 	args := EngineArgs{
 		Config: config.XDPConfig{
 			Enabled:   true,
-			Port:      getNextTestPort(),
 			QueueSize: 1024,
 			BatchSize: 32,
 		},
+		Port:   getNextTestPort(),
 		Logger: &mockEngineLogger{},
 	}
 
