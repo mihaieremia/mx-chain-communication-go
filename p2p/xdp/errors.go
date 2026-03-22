@@ -1,6 +1,10 @@
 package xdp
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/multiversx/mx-chain-communication-go/p2p/xdp/afxdp"
+)
 
 // ErrXDPNotSupported is returned when XDP is not supported on the platform
 var ErrXDPNotSupported = errors.New("XDP is not supported on this platform")
@@ -62,8 +66,9 @@ var ErrNoSharedKey = errors.New("no shared key for peer")
 // ErrSocketNotInitialized is returned when the XDP socket is not initialized
 var ErrSocketNotInitialized = errors.New("XDP socket not initialized")
 
-// ErrSocketClosed is returned when operations are attempted on a closed socket
-var ErrSocketClosed = errors.New("XDP socket is closed")
+// ErrSocketClosed is returned when operations are attempted on a closed socket.
+// Aliased to afxdp.ErrSocketClosed so errors.Is works across packages.
+var ErrSocketClosed = afxdp.ErrSocketClosed
 
 // ErrFragmentTimeout is returned when fragment reassembly times out
 var ErrFragmentTimeout = errors.New("fragment reassembly timeout")
@@ -95,8 +100,12 @@ var ErrKernelVersionTooOld = errors.New("kernel version too old for XDP (require
 // ErrNoNetAdmin is returned when CAP_NET_ADMIN capability is missing
 var ErrNoNetAdmin = errors.New("CAP_NET_ADMIN capability required for XDP")
 
-// ErrInterfaceNotFound is returned when the specified network interface is not found
-var ErrInterfaceNotFound = errors.New("network interface not found")
+// ErrInterfaceNotFound is returned when the specified network interface is not found.
+// Aliased to afxdp.ErrInterfaceNotFound so errors.Is works across packages.
+var ErrInterfaceNotFound = afxdp.ErrInterfaceNotFound
 
 // ErrDriverNotSupported is returned when the NIC driver doesn't support XDP
 var ErrDriverNotSupported = errors.New("NIC driver does not support XDP")
+
+// ErrSendQueueFull is returned when the async send queue is full
+var ErrSendQueueFull = errors.New("send queue full")

@@ -80,18 +80,8 @@ func NewAFXDPSocket(config Config, log p2p.Logger) (*AFXDPSocket, error) {
 		}
 	}
 
-	// Convert XDPMode to afxdp.XDPMode
-	var afxdpMode afxdp.XDPMode
-	switch config.XDPMode {
-	case XDPModeNative:
-		afxdpMode = afxdp.XDPModeNative
-	case XDPModeSKB:
-		afxdpMode = afxdp.XDPModeSKB
-	case XDPModeHW:
-		afxdpMode = afxdp.XDPModeHW
-	default:
-		afxdpMode = afxdp.XDPModeAuto
-	}
+	// config.XDPMode is a type alias for afxdp.XDPMode — use directly.
+	afxdpMode := config.XDPMode
 
 	// Create AF_XDP manager config
 	managerConfig := afxdp.ManagerConfig{

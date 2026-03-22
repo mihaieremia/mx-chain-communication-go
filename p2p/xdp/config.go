@@ -2,20 +2,24 @@ package xdp
 
 import (
 	"time"
+
+	"github.com/multiversx/mx-chain-communication-go/p2p/xdp/afxdp"
 )
 
-// XDPMode specifies how the XDP program is attached
-type XDPMode int
+// XDPMode specifies how the XDP program is attached.
+// This is a type alias for afxdp.XDPMode so the two packages share a single type
+// and no translation switch is needed at the boundary.
+type XDPMode = afxdp.XDPMode
 
 const (
 	// XDPModeAuto tries native mode first, falls back to SKB mode
-	XDPModeAuto XDPMode = iota
+	XDPModeAuto = afxdp.XDPModeAuto
 	// XDPModeNative uses native driver mode (requires driver support)
-	XDPModeNative
+	XDPModeNative = afxdp.XDPModeNative
 	// XDPModeSKB uses generic SKB mode (works on any NIC)
-	XDPModeSKB
+	XDPModeSKB = afxdp.XDPModeSKB
 	// XDPModeHW uses hardware offload mode (requires NIC support)
-	XDPModeHW
+	XDPModeHW = afxdp.XDPModeHW
 )
 
 // Config holds the XDP configuration
