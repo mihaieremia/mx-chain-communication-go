@@ -51,6 +51,13 @@ func NewBroadcaster(
 	}
 }
 
+// getLibP2PFallback returns the current libp2p fallback broadcaster under a read lock.
+func (b *Broadcaster) getLibP2PFallback() LibP2PBroadcaster {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.libp2pFallback
+}
+
 // SetLibP2PFallback sets the libp2p fallback broadcaster
 func (b *Broadcaster) SetLibP2PFallback(fallback LibP2PBroadcaster) {
 	b.mu.Lock()
@@ -70,11 +77,7 @@ func (b *Broadcaster) BroadcastOnChannel(channel string, topic string, data []by
 
 	if len(meshPeers) == 0 {
 		// No XDP peers, use libp2p fallback
-		b.mu.RLock()
-		fallback := b.libp2pFallback
-		b.mu.RUnlock()
-
-		if fallback != nil {
+		if fallback := b.getLibP2PFallback(); fallback != nil {
 			fallback.BroadcastOnChannel(channel, topic, data)
 		}
 		return
@@ -103,11 +106,7 @@ func (b *Broadcaster) BroadcastOnChannel(channel string, topic string, data []by
 
 	// Fallback to libp2p for non-XDP peers
 	if len(nonXDPPeers) > 0 {
-		b.mu.RLock()
-		fallback := b.libp2pFallback
-		b.mu.RUnlock()
-
-		if fallback != nil {
+		if fallback := b.getLibP2PFallback(); fallback != nil {
 			fallback.BroadcastOnChannel(channel, topic, data)
 			b.libp2pFallbacks.Add(1)
 		}
@@ -120,11 +119,7 @@ func (b *Broadcaster) BroadcastToAll(topic string, data []byte) {
 
 	if len(allPeers) == 0 {
 		// Fallback
-		b.mu.RLock()
-		fallback := b.libp2pFallback
-		b.mu.RUnlock()
-
-		if fallback != nil {
+		if fallback := b.getLibP2PFallback(); fallback != nil {
 			fallback.Broadcast(topic, data)
 		}
 		return

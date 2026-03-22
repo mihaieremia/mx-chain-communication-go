@@ -86,6 +86,27 @@ func DecodeCapability(data []byte) (*Capability, error) {
 	return c, nil
 }
 
+// readCapabilityFromStream reads a complete capability message from the stream,
+// accumulating reads since a single Read is not guaranteed to return all data.
+func readCapabilityFromStream(s network.Stream) ([]byte, error) {
+	buf := make([]byte, MaxCapabilityMessageSize)
+	var n int
+	for n < MaxCapabilityMessageSize {
+		nn, err := s.Read(buf[n:])
+		n += nn
+		if err == io.EOF || nn == 0 {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	if n == 0 {
+		return nil, fmt.Errorf("empty capability message")
+	}
+	return buf[:n], nil
+}
+
 // CapabilityHandler handles XDP capability exchange with peers
 type CapabilityHandler struct {
 	mu sync.RWMutex
@@ -144,25 +165,17 @@ func (ch *CapabilityHandler) handleStream(s network.Stream) {
 
 	remotePeerID := s.Conn().RemotePeer()
 
-	// Read remote capability (accumulate reads since a single Read is not guaranteed to return all data)
-	buf := make([]byte, MaxCapabilityMessageSize)
-	var n int
-	for n < MaxCapabilityMessageSize {
-		nn, readErr := s.Read(buf[n:])
-		n += nn
-		if readErr == io.EOF || nn == 0 {
-			break
-		}
-		if readErr != nil {
-			ch.log.Trace("failed to read capability",
-				"peer", remotePeerID.String(),
-				"error", readErr,
-			)
-			return
-		}
+	// Read remote capability
+	capData, readErr := readCapabilityFromStream(s)
+	if readErr != nil {
+		ch.log.Trace("failed to read capability",
+			"peer", remotePeerID.String(),
+			"error", readErr,
+		)
+		return
 	}
 
-	remoteCap, err := DecodeCapability(buf[:n])
+	remoteCap, err := DecodeCapability(capData)
 	if err != nil {
 		ch.log.Trace("failed to decode capability",
 			"peer", remotePeerID.String(),
@@ -204,21 +217,13 @@ func (ch *CapabilityHandler) ExchangeCapability(ctx context.Context, peerID core
 		return nil, fmt.Errorf("failed to send capability: %w", err)
 	}
 
-	// Read remote capability (accumulate reads since a single Read is not guaranteed to return all data)
-	buf := make([]byte, MaxCapabilityMessageSize)
-	var n int
-	for n < MaxCapabilityMessageSize {
-		nn, readErr := s.Read(buf[n:])
-		n += nn
-		if readErr == io.EOF || nn == 0 {
-			break
-		}
-		if readErr != nil {
-			return nil, fmt.Errorf("failed to read capability: %w", readErr)
-		}
+	// Read remote capability
+	capData, readErr := readCapabilityFromStream(s)
+	if readErr != nil {
+		return nil, fmt.Errorf("failed to read capability: %w", readErr)
 	}
 
-	remoteCap, err := DecodeCapability(buf[:n])
+	remoteCap, err := DecodeCapability(capData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode capability: %w", err)
 	}

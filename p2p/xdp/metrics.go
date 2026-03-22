@@ -5,6 +5,11 @@ import (
 	"time"
 )
 
+// TODO: Metrics is created in Engine but never wired to Sender/Receiver/Router — none of
+// the recording methods are called in production code. Wire it into the hot paths or
+// remove it once the XDP layer stabilises. Kept for now because XDPMetrics interface
+// and Engine.GetMetrics() are part of the public API.
+
 // Metrics collects XDP performance metrics
 type Metrics struct {
 	mu sync.RWMutex

@@ -1,7 +1,6 @@
 package xdp
 
 import (
-	"fmt"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -13,14 +12,10 @@ import (
 	"github.com/multiversx/mx-chain-core-go/core"
 )
 
-// Compile-time check for unused import
-var _ = fmt.Errorf
-
 // Sender handles XDP packet transmission
 type Sender struct {
 	socket        *Socket
 	peerManager   *peer.Manager
-	fragmenter    *FragmentAssembler
 	topicRegistry *TopicRegistry
 	authenticator *crypto.Authenticator
 
@@ -91,7 +86,6 @@ func NewSender(
 	s := &Sender{
 		socket:        socket,
 		peerManager:   peerManager,
-		fragmenter:    NewFragmentAssembler(DefaultFragmentTimeout),
 		topicRegistry: topicRegistry,
 		authenticator: crypto.NewAuthenticator(sessionManager),
 		batchSize:     config.BatchSize,
@@ -134,8 +128,7 @@ func (s *Sender) SendWithType(topic string, data []byte, peerID core.PeerID, msg
 // sendDirect sends a message directly without queueing
 func (s *Sender) sendDirect(topic string, data []byte, peerID core.PeerID, addr *net.UDPAddr, flags byte, msgType byte) error {
 	// Get peer ID bytes (truncated to 32 bytes)
-	var peerIDBytes [32]byte
-	copy(peerIDBytes[:], []byte(peerID))
+	peerIDBytes := peerIDToBytes(peerID)
 
 	// Get next sequence number for this peer
 	seqNo := s.nextSeqNo(peerID)
@@ -203,7 +196,7 @@ func (s *Sender) SendAsync(topic string, data []byte, peerID core.PeerID) error 
 		return nil
 	default:
 		s.messagesDropped.Add(1)
-		return fmt.Errorf("send queue full")
+		return ErrSendQueueFull
 	}
 }
 
@@ -300,8 +293,5 @@ func (s *Sender) Close() error {
 
 	// Wait for batchSendLoop goroutine to finish (safe to call multiple times)
 	s.wg.Wait()
-
-	// fragmenter.Close() is idempotent (also guarded by sync.Once)
-	s.fragmenter.Close()
 	return nil
 }

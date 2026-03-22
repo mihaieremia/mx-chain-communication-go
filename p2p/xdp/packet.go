@@ -146,15 +146,13 @@ func (p *Packet) Size() int {
 	return HeaderSize + len(p.Payload)
 }
 
-// Encode encodes the packet to bytes (without HMAC - HMAC is set separately)
-func (p *Packet) Encode() ([]byte, error) {
-	totalSize := HeaderSize + len(p.Payload)
-	if totalSize > DefaultMTU {
-		return nil, ErrPacketTooLarge
-	}
+// headerSizeBeforeHMAC is the number of bytes in the header before the HMAC field.
+const headerSizeBeforeHMAC = MagicSize + VersionSize + FlagsSize + MsgTypeSize + TopicIDSize +
+	SeqNoSize + TimestampSize + FragmentSize + PeerIDSize // 59 bytes
 
-	buf := make([]byte, totalSize)
-
+// encodeHeader writes all header fields up to (but not including) the HMAC into buf
+// and returns the number of bytes written. buf must be at least headerSizeBeforeHMAC bytes.
+func (p *Packet) encodeHeader(buf []byte) int {
 	// Magic (2 bytes)
 	buf[0] = p.Magic[0]
 	buf[1] = p.Magic[1]
@@ -184,8 +182,23 @@ func (p *Packet) Encode() ([]byte, error) {
 	// Peer ID (32 bytes)
 	copy(buf[27:59], p.PeerID[:])
 
+	return headerSizeBeforeHMAC
+}
+
+// Encode encodes the packet to bytes (without HMAC - HMAC is set separately)
+func (p *Packet) Encode() ([]byte, error) {
+	totalSize := HeaderSize + len(p.Payload)
+	if totalSize > DefaultMTU {
+		return nil, ErrPacketTooLarge
+	}
+
+	buf := make([]byte, totalSize)
+
+	// Write header fields before HMAC
+	n := p.encodeHeader(buf)
+
 	// HMAC (32 bytes)
-	copy(buf[59:91], p.HMAC[:])
+	copy(buf[n:n+HMACSize], p.HMAC[:])
 
 	// Payload
 	copy(buf[HeaderSize:], p.Payload)
@@ -196,40 +209,14 @@ func (p *Packet) Encode() ([]byte, error) {
 // EncodeForHMAC returns the data to be used for HMAC calculation (header without HMAC + payload)
 func (p *Packet) EncodeForHMAC() []byte {
 	// Create buffer without HMAC field
-	dataSize := (HeaderSize - HMACSize) + len(p.Payload)
+	dataSize := headerSizeBeforeHMAC + len(p.Payload)
 	buf := make([]byte, dataSize)
 
-	// Magic (2 bytes)
-	buf[0] = p.Magic[0]
-	buf[1] = p.Magic[1]
+	// Write header fields before HMAC
+	n := p.encodeHeader(buf)
 
-	// Version (1 byte)
-	buf[2] = p.Version
-
-	// Flags (1 byte)
-	buf[3] = p.Flags
-
-	// Message type (1 byte)
-	buf[4] = p.MsgType
-
-	// Topic ID (2 bytes, big endian)
-	binary.BigEndian.PutUint16(buf[5:7], p.TopicID)
-
-	// Sequence number (8 bytes, big endian)
-	binary.BigEndian.PutUint64(buf[7:15], p.SeqNo)
-
-	// Timestamp (8 bytes, big endian)
-	binary.BigEndian.PutUint64(buf[15:23], uint64(p.Timestamp))
-
-	// Fragment info (4 bytes)
-	binary.BigEndian.PutUint16(buf[23:25], p.FragTotal)
-	binary.BigEndian.PutUint16(buf[25:27], p.FragIndex)
-
-	// Peer ID (32 bytes)
-	copy(buf[27:59], p.PeerID[:])
-
-	// Payload
-	copy(buf[59:], p.Payload)
+	// Payload (directly after the pre-HMAC header)
+	copy(buf[n:], p.Payload)
 
 	return buf
 }
@@ -317,9 +304,19 @@ func NewTopicRegistry() *TopicRegistry {
 // the ID is incremented until a free slot is found, and a warning is logged via the
 // returned collision flag so callers can log appropriately.
 func (r *TopicRegistry) Register(topic string) uint16 {
+	// Fast path: read lock check for already-registered topics
+	r.mu.RLock()
+	if id, ok := r.byString[topic]; ok {
+		r.mu.RUnlock()
+		return id
+	}
+	r.mu.RUnlock()
+
+	// Slow path: write lock for new registration
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// Double-check after acquiring write lock
 	if id, ok := r.byString[topic]; ok {
 		return id
 	}

@@ -211,10 +211,11 @@ func (r *Receiver) processPacket(received *receivedPacket) {
 		return
 	}
 
-	// Look up peer by address
-	peerID, ok := r.peerManager.GetPeerByAddress(received.addr.String())
+	// Look up peer by address (compute once to avoid repeated String() calls)
+	addrStr := received.addr.String()
+	peerID, ok := r.peerManager.GetPeerByAddress(addrStr)
 	if !ok {
-		r.log.Trace("unknown peer address", "addr", received.addr.String())
+		r.log.Trace("unknown peer address", "addr", addrStr)
 		return
 	}
 

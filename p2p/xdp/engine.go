@@ -121,6 +121,17 @@ func NewEngine(args EngineArgs) (*Engine, error) {
 		return e, nil
 	}
 
+	// Track cleanups for rollback on error
+	var cleanups []func()
+	succeeded := false
+	defer func() {
+		if !succeeded {
+			for i := len(cleanups) - 1; i >= 0; i-- {
+				cleanups[i]()
+			}
+		}
+	}()
+
 	// Create socket
 	socket, err := NewSocket(xdpConfig, log)
 	if err != nil {
@@ -128,12 +139,14 @@ func NewEngine(args EngineArgs) (*Engine, error) {
 		return nil, fmt.Errorf("failed to create XDP socket: %w", err)
 	}
 	e.socket = socket
+	cleanups = append(cleanups, func() { socket.Close() })
 
 	// Create session manager
 	e.sessionManager = crypto.NewSessionManager(
 		xdpConfig.Security.KeyRotationInterval,
 		10*time.Minute, // idle timeout
 	)
+	cleanups = append(cleanups, func() { e.sessionManager.Close() })
 
 	// Create replay protector
 	replayProtector, err := NewReplayProtector(
@@ -142,8 +155,6 @@ func NewEngine(args EngineArgs) (*Engine, error) {
 		xdpConfig.Security.MaxSeqNoGap,
 	)
 	if err != nil {
-		e.sessionManager.Close()
-		socket.Close()
 		cancel()
 		return nil, fmt.Errorf("failed to create replay protector: %w", err)
 	}
@@ -152,12 +163,11 @@ func NewEngine(args EngineArgs) (*Engine, error) {
 	// Create peer manager
 	peerManager, err := peer.NewManager(peer.DefaultManagerConfig(), e.sessionManager, log)
 	if err != nil {
-		e.sessionManager.Close()
-		socket.Close()
 		cancel()
 		return nil, fmt.Errorf("failed to create peer manager: %w", err)
 	}
 	e.peerManager = peerManager
+	cleanups = append(cleanups, func() { peerManager.Close() })
 
 	// Create capability handler if host is provided
 	if args.Host != nil {
@@ -182,13 +192,11 @@ func NewEngine(args EngineArgs) (*Engine, error) {
 		log,
 	)
 	if err != nil {
-		e.sessionManager.Close()
-		socket.Close()
-		peerManager.Close()
 		cancel()
 		return nil, fmt.Errorf("failed to create sender: %w", err)
 	}
 	e.sender = sender
+	cleanups = append(cleanups, func() { sender.Close() })
 
 	// Create receiver
 	receiver, err := NewReceiver(
@@ -201,10 +209,6 @@ func NewEngine(args EngineArgs) (*Engine, error) {
 		log,
 	)
 	if err != nil {
-		e.sessionManager.Close()
-		sender.Close()
-		socket.Close()
-		peerManager.Close()
 		cancel()
 		return nil, fmt.Errorf("failed to create receiver: %w", err)
 	}
@@ -216,6 +220,7 @@ func NewEngine(args EngineArgs) (*Engine, error) {
 	// Create router
 	e.router = NewRouter(sender, e.broadcaster, peerManager, DefaultRouterConfig(), log)
 
+	succeeded = true
 	e.enabled.Store(true)
 	log.Info("XDP engine created",
 		"port", xdpConfig.Port,
