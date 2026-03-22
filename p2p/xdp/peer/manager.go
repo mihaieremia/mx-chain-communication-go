@@ -60,14 +60,18 @@ func DefaultManagerConfig() ManagerConfig {
 	}
 }
 
-// NewManager creates a new XDP peer manager
-func NewManager(config ManagerConfig, log p2p.Logger) (*Manager, error) {
+// NewManager creates a new XDP peer manager.
+// The sessionManager parameter is shared with the Engine so that sessions registered
+// here are visible to Sender/Receiver (which authenticate via the Engine's sessionManager).
+func NewManager(config ManagerConfig, sessionManager *crypto.SessionManager, log p2p.Logger) (*Manager, error) {
+	if sessionManager == nil {
+		return nil, fmt.Errorf("nil session manager")
+	}
+
 	keyExchange, err := crypto.NewKeyExchange()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create key exchange: %w", err)
 	}
-
-	sessionManager := crypto.NewSessionManager(config.KeyRotationInterval, config.IdleTimeout)
 
 	return &Manager{
 		peers:          make(map[string]*XDPPeer),
@@ -263,7 +267,9 @@ func (m *Manager) MarkConnected(peerID core.PeerID) {
 	}
 }
 
-// Close closes the manager
+// Close closes the manager.
+// Note: the sessionManager is NOT closed here because it is shared with the Engine,
+// which owns its lifecycle and closes it in Engine.Stop().
 func (m *Manager) Close() error {
-	return m.sessionManager.Close()
+	return nil
 }

@@ -32,6 +32,11 @@ func generateValidPublicKey(t testing.TB) []byte {
 	return ke.GetPublicKeyBytes()
 }
 
+// newTestSessionManager creates a SessionManager for use in tests.
+func newTestSessionManager() *crypto.SessionManager {
+	return crypto.NewSessionManager(24*time.Hour, 10*time.Minute)
+}
+
 func TestDefaultManagerConfig(t *testing.T) {
 	t.Parallel()
 
@@ -45,7 +50,7 @@ func TestDefaultManagerConfig(t *testing.T) {
 func TestNewManager(t *testing.T) {
 	t.Parallel()
 
-	manager, err := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, err := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 
 	require.NoError(t, err)
 	require.NotNil(t, manager)
@@ -55,7 +60,7 @@ func TestNewManager(t *testing.T) {
 func TestManager_RegisterPeer(t *testing.T) {
 	t.Parallel()
 
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	peerID := core.PeerID("test-peer-123")
@@ -77,7 +82,7 @@ func TestManager_RegisterPeer(t *testing.T) {
 func TestManager_RegisterPeer_Update(t *testing.T) {
 	t.Parallel()
 
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	peerID := core.PeerID("test-peer")
@@ -110,7 +115,7 @@ func TestManager_RegisterPeer_MaxPeers(t *testing.T) {
 
 	config := DefaultManagerConfig()
 	config.MaxPeers = 3
-	manager, _ := NewManager(config, &mockLogger{})
+	manager, _ := NewManager(config, newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	// Register max peers
@@ -139,7 +144,7 @@ func TestManager_RegisterPeer_MaxPeers(t *testing.T) {
 func TestManager_UnregisterPeer(t *testing.T) {
 	t.Parallel()
 
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	peerID := core.PeerID("peer-to-remove")
@@ -160,7 +165,7 @@ func TestManager_UnregisterPeer(t *testing.T) {
 func TestManager_GetPeer(t *testing.T) {
 	t.Parallel()
 
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	peerID := core.PeerID("get-test-peer")
@@ -187,7 +192,7 @@ func TestManager_GetPeer(t *testing.T) {
 func TestManager_GetPeer_NotFound(t *testing.T) {
 	t.Parallel()
 
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	_, ok := manager.GetPeer("unknown-peer")
@@ -198,7 +203,7 @@ func TestManager_GetPeer_NotFound(t *testing.T) {
 func TestManager_GetPeerByAddress(t *testing.T) {
 	t.Parallel()
 
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	peerID := core.PeerID("address-test-peer")
@@ -219,7 +224,7 @@ func TestManager_GetPeerByAddress(t *testing.T) {
 func TestManager_GetPeerByAddress_NotFound(t *testing.T) {
 	t.Parallel()
 
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	_, ok := manager.GetPeerByAddress("192.168.1.1:12345")
@@ -230,7 +235,7 @@ func TestManager_GetPeerByAddress_NotFound(t *testing.T) {
 func TestManager_HasXDP(t *testing.T) {
 	t.Parallel()
 
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	peerID := core.PeerID("xdp-peer")
@@ -252,7 +257,7 @@ func TestManager_HasXDP(t *testing.T) {
 func TestManager_HasXDP_NotSupported(t *testing.T) {
 	t.Parallel()
 
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	peerID := core.PeerID("no-xdp-peer")
@@ -270,7 +275,7 @@ func TestManager_HasXDP_NotSupported(t *testing.T) {
 func TestManager_GetXDPAddress(t *testing.T) {
 	t.Parallel()
 
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	peerID := core.PeerID("addr-test")
@@ -291,7 +296,7 @@ func TestManager_GetXDPAddress(t *testing.T) {
 func TestManager_GetPublicKey(t *testing.T) {
 	t.Parallel()
 
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	pubKey := manager.GetPublicKey()
@@ -302,7 +307,7 @@ func TestManager_GetPublicKey(t *testing.T) {
 func TestManager_TouchPeer(t *testing.T) {
 	t.Parallel()
 
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	peerID := core.PeerID("touch-test")
@@ -327,7 +332,7 @@ func TestManager_TouchPeer(t *testing.T) {
 func TestManager_GetXDPPeers(t *testing.T) {
 	t.Parallel()
 
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	// Register 5 peers
@@ -349,7 +354,7 @@ func TestManager_GetXDPPeers(t *testing.T) {
 func TestManager_GetConnectedCount(t *testing.T) {
 	t.Parallel()
 
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	assert.Equal(t, 0, manager.GetConnectedCount())
@@ -371,7 +376,7 @@ func TestManager_GetConnectedCount(t *testing.T) {
 func TestManager_MarkDisconnected(t *testing.T) {
 	t.Parallel()
 
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	peerID := core.PeerID("disconnect-test")
@@ -398,7 +403,7 @@ func TestManager_MarkDisconnected(t *testing.T) {
 func TestManager_MarkConnected(t *testing.T) {
 	t.Parallel()
 
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	peerID := core.PeerID("reconnect-test")
@@ -418,7 +423,7 @@ func TestManager_MarkConnected(t *testing.T) {
 }
 
 func TestManager_ConcurrentAccess(t *testing.T) {
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	var wg sync.WaitGroup
@@ -469,7 +474,7 @@ func TestManager_ConcurrentAccess(t *testing.T) {
 func TestManager_Close(t *testing.T) {
 	t.Parallel()
 
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 
 	err := manager.Close()
 
@@ -478,7 +483,7 @@ func TestManager_Close(t *testing.T) {
 
 // Benchmarks
 func BenchmarkManager_RegisterPeer(b *testing.B) {
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	// Pre-generate keys for benchmark
@@ -499,7 +504,7 @@ func BenchmarkManager_RegisterPeer(b *testing.B) {
 }
 
 func BenchmarkManager_HasXDP(b *testing.B) {
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	ke, _ := crypto.NewKeyExchange()
@@ -518,7 +523,7 @@ func BenchmarkManager_HasXDP(b *testing.B) {
 }
 
 func BenchmarkManager_GetXDPPeers(b *testing.B) {
-	manager, _ := NewManager(DefaultManagerConfig(), &mockLogger{})
+	manager, _ := NewManager(DefaultManagerConfig(), newTestSessionManager(), &mockLogger{})
 	defer manager.Close()
 
 	// Register 100 peers

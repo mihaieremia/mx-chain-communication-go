@@ -150,7 +150,7 @@ func NewEngine(args EngineArgs) (*Engine, error) {
 	e.replayProtector = replayProtector
 
 	// Create peer manager
-	peerManager, err := peer.NewManager(peer.DefaultManagerConfig(), log)
+	peerManager, err := peer.NewManager(peer.DefaultManagerConfig(), e.sessionManager, log)
 	if err != nil {
 		e.sessionManager.Close()
 		socket.Close()
