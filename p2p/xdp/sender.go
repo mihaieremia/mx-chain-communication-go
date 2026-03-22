@@ -35,7 +35,8 @@ type Sender struct {
 	stopChan   chan struct{}
 
 	// Graceful shutdown
-	wg sync.WaitGroup
+	wg        sync.WaitGroup
+	closeOnce sync.Once
 
 	// Stats
 	messagesSent    uint64
@@ -304,11 +305,12 @@ type SenderStats struct {
 
 // Close closes the sender and waits for all goroutines to finish
 func (s *Sender) Close() error {
-	close(s.stopChan)
+	s.closeOnce.Do(func() { close(s.stopChan) })
 
-	// Wait for batchSendLoop goroutine to finish
+	// Wait for batchSendLoop goroutine to finish (safe to call multiple times)
 	s.wg.Wait()
 
+	// fragmenter.Close() is idempotent (also guarded by sync.Once)
 	s.fragmenter.Close()
 	return nil
 }

@@ -30,10 +30,11 @@ type fragmentState struct {
 
 // FragmentAssembler handles message fragmentation and reassembly
 type FragmentAssembler struct {
-	mu       sync.RWMutex
-	states   map[fragmentKey]*fragmentState
-	timeout  time.Duration
-	stopChan chan struct{}
+	mu        sync.RWMutex
+	states    map[fragmentKey]*fragmentState
+	timeout   time.Duration
+	stopChan  chan struct{}
+	closeOnce sync.Once
 }
 
 // NewFragmentAssembler creates a new fragment assembler
@@ -215,6 +216,6 @@ func (fa *FragmentAssembler) PendingCount() int {
 
 // Close stops the cleanup goroutine
 func (fa *FragmentAssembler) Close() error {
-	close(fa.stopChan)
+	fa.closeOnce.Do(func() { close(fa.stopChan) })
 	return nil
 }

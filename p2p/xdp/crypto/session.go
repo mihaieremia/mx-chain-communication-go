@@ -127,6 +127,7 @@ type SessionManager struct {
 	keyRotationInterval time.Duration
 	idleTimeout         time.Duration
 	stopChan            chan struct{}
+	closeOnce           sync.Once
 }
 
 // NewSessionManager creates a new session manager
@@ -225,6 +226,6 @@ func (sm *SessionManager) cleanup() {
 
 // Close stops the session manager
 func (sm *SessionManager) Close() error {
-	close(sm.stopChan)
+	sm.closeOnce.Do(func() { close(sm.stopChan) })
 	return nil
 }

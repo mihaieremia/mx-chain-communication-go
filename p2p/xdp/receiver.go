@@ -5,6 +5,7 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/multiversx/mx-chain-communication-go/p2p"
 	"github.com/multiversx/mx-chain-communication-go/p2p/xdp/crypto"
@@ -37,6 +38,7 @@ type Receiver struct {
 	running atomic.Bool
 	ctx     context.Context
 	cancel  context.CancelFunc
+	wg      sync.WaitGroup
 
 	// Stats
 	messagesReceived atomic.Uint64
@@ -123,11 +125,19 @@ func (r *Receiver) Start() error {
 
 	// Start workers
 	for i := 0; i < r.numWorkers; i++ {
-		go r.worker(i)
+		r.wg.Add(1)
+		go func(id int) {
+			defer r.wg.Done()
+			r.worker(id)
+		}(i)
 	}
 
 	// Start receive loop
-	go r.receiveLoop()
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		r.receiveLoop()
+	}()
 
 	r.log.Info("XDP receiver started", "workers", r.numWorkers)
 	return nil
@@ -136,6 +146,7 @@ func (r *Receiver) Start() error {
 // receiveLoop continuously receives packets from the socket
 func (r *Receiver) receiveLoop() {
 	buf := make([]byte, DefaultMTU)
+	consecutiveErrors := 0
 
 	for r.running.Load() {
 		select {
@@ -149,8 +160,21 @@ func (r *Receiver) receiveLoop() {
 			if r.running.Load() {
 				r.log.Trace("receive error", "error", err)
 			}
+			consecutiveErrors++
+			delay := time.Duration(consecutiveErrors) * 10 * time.Millisecond
+			if delay > 100*time.Millisecond {
+				delay = 100 * time.Millisecond
+			}
+			select {
+			case <-r.ctx.Done():
+				return
+			case <-time.After(delay):
+			}
 			continue
 		}
+
+		// Successful receive: reset error counter
+		consecutiveErrors = 0
 
 		// Copy data for processing
 		data := make([]byte, n)
@@ -280,6 +304,7 @@ func (r *Receiver) Stop() error {
 	}
 
 	r.cancel()
+	r.wg.Wait()
 	r.fragmenter.Close()
 
 	r.log.Info("XDP receiver stopped")
