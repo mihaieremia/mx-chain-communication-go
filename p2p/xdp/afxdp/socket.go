@@ -70,6 +70,7 @@ func New(config Config) (*Socket, error) {
 	}
 
 	s := &Socket{
+		fd:      -1,
 		config:  config,
 		ifindex: iface.Index,
 		ifname:  config.Interface,
@@ -144,18 +145,30 @@ func (s *Socket) createRings() error {
 	// Create completion ring
 	s.compRing, err = NewCompletionRing(s.fd, s.config.CompRingSize)
 	if err != nil {
+		s.fillRing.Close()
+		s.fillRing = nil
 		return err
 	}
 
 	// Create RX ring
 	s.rxRing, err = NewRxRing(s.fd, s.config.RxRingSize)
 	if err != nil {
+		s.compRing.Close()
+		s.compRing = nil
+		s.fillRing.Close()
+		s.fillRing = nil
 		return err
 	}
 
 	// Create TX ring
 	s.txRing, err = NewTxRing(s.fd, s.config.TxRingSize)
 	if err != nil {
+		s.rxRing.Close()
+		s.rxRing = nil
+		s.compRing.Close()
+		s.compRing = nil
+		s.fillRing.Close()
+		s.fillRing = nil
 		return err
 	}
 
@@ -464,8 +477,9 @@ func (s *Socket) Close() error {
 	}
 
 	// Close socket fd
-	if s.fd != 0 {
+	if s.fd >= 0 {
 		unix.Close(s.fd)
+		s.fd = -1
 	}
 
 	return nil

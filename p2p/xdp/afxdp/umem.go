@@ -160,9 +160,14 @@ func (u *UMEM) FreeFrame(addr uint64) bool {
 			return false // Stack is full (shouldn't happen)
 		}
 
+		// Write the frame address BEFORE the CAS so that a concurrent
+		// AllocFrame that sees the new freeTop will always find the
+		// address already in place. If the CAS fails, the write is
+		// harmless (it will be overwritten on the next successful CAS).
+		u.freeFrames[top] = addr
+
 		newTop := top + 1
 		if atomic.CompareAndSwapInt64(&u.freeTop, top, newTop) {
-			u.freeFrames[top] = addr
 			return true
 		}
 		// CAS failed, retry

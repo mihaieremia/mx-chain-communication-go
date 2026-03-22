@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // Manager manages multiple AF_XDP sockets across NIC queues
@@ -433,10 +434,7 @@ func BenchmarkSocket(sock *Socket, packetSize int, duration int) (uint64, uint64
 }
 
 func getNanoTime() int64 {
-	// This is a placeholder - would use unix.ClockGettime for accuracy
-	var t int64
-	// unix.ClockGettime(unix.CLOCK_MONOTONIC, &ts)
-	return t
+	return time.Now().UnixNano()
 }
 
 // GetIRQInfo returns IRQ information for an interface

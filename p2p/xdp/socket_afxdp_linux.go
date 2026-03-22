@@ -3,8 +3,11 @@
 package xdp
 
 import (
+	"bufio"
 	"fmt"
 	"net"
+	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -24,6 +27,11 @@ type AFXDPSocket struct {
 	config    Config
 	ifaceName string
 	localAddr *net.UDPAddr
+
+	// MAC address resolution
+	srcMAC   net.HardwareAddr       // local interface MAC
+	arpCache map[string]net.HardwareAddr // IP string -> MAC
+	arpMu    sync.RWMutex
 
 	// Receive handling
 	rxChan   chan *receivedData
@@ -111,6 +119,14 @@ func NewAFXDPSocket(config Config, log p2p.Logger) (*AFXDPSocket, error) {
 		return nil, fmt.Errorf("failed to create AF_XDP manager: %w", err)
 	}
 
+	// Get the local interface's hardware MAC address
+	iface, err := net.InterfaceByName(ifaceName)
+	if err != nil {
+		manager.Close()
+		return nil, fmt.Errorf("failed to get interface info for %s: %w", ifaceName, err)
+	}
+	srcMAC := iface.HardwareAddr
+
 	s := &AFXDPSocket{
 		manager:   manager,
 		config:    config,
@@ -118,8 +134,10 @@ func NewAFXDPSocket(config Config, log p2p.Logger) (*AFXDPSocket, error) {
 		localAddr: &net.UDPAddr{
 			Port: int(config.Port),
 		},
-		rxChan: make(chan *receivedData, config.QueueSize),
-		log:    log,
+		srcMAC:   srcMAC,
+		arpCache: make(map[string]net.HardwareAddr),
+		rxChan:   make(chan *receivedData, config.QueueSize),
+		log:      log,
 	}
 
 	// Start the manager with receive callback
@@ -146,14 +164,13 @@ func (s *AFXDPSocket) handleReceive(queueID int, data []byte) {
 		return
 	}
 
-	// AF_XDP gives us raw ethernet frames
-	// We need to parse them to extract UDP payload and source address
-	// For now, we'll create a copy and extract what we can
+	// AF_XDP gives us raw ethernet frames.
+	// Copy the data first since UMEM buffers may be reused by the kernel.
 	dataCopy := make([]byte, len(data))
 	copy(dataCopy, data)
 
-	// Parse the packet to extract UDP info
-	addr, payload, err := parseUDPPacket(data)
+	// Parse the copy to extract UDP info
+	addr, payload, err := parseUDPPacket(dataCopy)
 	if err != nil {
 		s.rxErrors.Add(1)
 		return
@@ -162,7 +179,8 @@ func (s *AFXDPSocket) handleReceive(queueID int, data []byte) {
 	s.rxPackets.Add(1)
 	s.rxBytes.Add(uint64(len(payload)))
 
-	// Queue for receive
+	// Queue for receive. payload is a sub-slice of dataCopy, so it is
+	// safe to hold after the UMEM buffer is returned.
 	select {
 	case s.rxChan <- &receivedData{data: payload, addr: addr}:
 	default:
@@ -232,14 +250,87 @@ func parseUDPPacket(data []byte) (*net.UDPAddr, []byte, error) {
 	return addr, payload, nil
 }
 
+// resolveMAC looks up the destination MAC address for the given IP.
+// It first checks the local cache, then queries the kernel ARP table.
+// Falls back to broadcast MAC if resolution fails.
+func (s *AFXDPSocket) resolveMAC(ip net.IP) net.HardwareAddr {
+	key := ip.String()
+
+	// Fast path: check cache
+	s.arpMu.RLock()
+	mac, ok := s.arpCache[key]
+	s.arpMu.RUnlock()
+	if ok {
+		return mac
+	}
+
+	// Slow path: read kernel ARP table from /proc/net/arp
+	mac = lookupARPEntry(ip)
+	if mac != nil {
+		s.arpMu.Lock()
+		s.arpCache[key] = mac
+		s.arpMu.Unlock()
+		return mac
+	}
+
+	s.log.Trace("ARP resolution failed, using broadcast MAC", "ip", key)
+
+	// Fallback: broadcast
+	return net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
+}
+
+// lookupARPEntry reads /proc/net/arp to find the MAC for the given IP.
+func lookupARPEntry(ip net.IP) net.HardwareAddr {
+	f, err := os.Open("/proc/net/arp")
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
+	target := ip.String()
+	scanner := bufio.NewScanner(f)
+	// Skip header line
+	scanner.Scan()
+
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		// Format: IP HWtype Flags HWaddress Mask Device
+		if len(fields) < 4 {
+			continue
+		}
+		if fields[0] == target {
+			mac, err := net.ParseMAC(fields[3])
+			if err != nil {
+				continue
+			}
+			// Skip incomplete entries (00:00:00:00:00:00)
+			allZero := true
+			for _, b := range mac {
+				if b != 0 {
+					allZero = false
+					break
+				}
+			}
+			if allZero {
+				continue
+			}
+			return mac
+		}
+	}
+	return nil
+}
+
 // Send sends a packet to the specified address
 func (s *AFXDPSocket) Send(data []byte, addr *net.UDPAddr) error {
 	if s.closed.Load() {
 		return ErrSocketClosed
 	}
 
+	// Resolve destination MAC address
+	dstMAC := s.resolveMAC(addr.IP)
+
 	// Build raw ethernet frame with IP/UDP headers
-	frame, err := buildUDPPacket(s.localAddr, addr, data)
+	frame, err := buildUDPPacket(s.localAddr, addr, data, s.srcMAC, dstMAC)
 	if err != nil {
 		s.txErrors.Add(1)
 		return err
@@ -256,26 +347,15 @@ func (s *AFXDPSocket) Send(data []byte, addr *net.UDPAddr) error {
 	return nil
 }
 
-// buildUDPPacket builds a raw ethernet frame containing a UDP packet
-func buildUDPPacket(src, dst *net.UDPAddr, payload []byte) ([]byte, error) {
-	// For a proper implementation, we'd need:
-	// 1. Destination MAC address (from ARP or neighbor cache)
-	// 2. Source MAC address (from interface)
-	// 3. Proper IP/UDP checksum calculation
-	//
-	// This is a simplified version - in production, you'd want to:
-	// - Cache MAC addresses
-	// - Use hardware checksum offload where available
-	// - Handle VLAN tags if needed
-
+// buildUDPPacket builds a raw ethernet frame containing a UDP packet.
+// srcMAC and dstMAC are the Ethernet source and destination hardware addresses.
+func buildUDPPacket(src, dst *net.UDPAddr, payload []byte, srcMAC, dstMAC net.HardwareAddr) ([]byte, error) {
 	// Ethernet header (14 bytes)
-	// For now, use broadcast MAC - real impl needs ARP resolution
 	frame := make([]byte, 14+20+8+len(payload))
 
 	// Ethernet: dst MAC (6) + src MAC (6) + ethertype (2)
-	// Using broadcast for demo - real impl needs ARP
-	copy(frame[0:6], []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}) // dst MAC
-	copy(frame[6:12], []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}) // src MAC (should be real)
+	copy(frame[0:6], dstMAC)
+	copy(frame[6:12], srcMAC)
 	frame[12] = 0x08 // IPv4
 	frame[13] = 0x00
 
@@ -358,7 +438,8 @@ func (s *AFXDPSocket) SendBatch(packets [][]byte, addrs []*net.UDPAddr) error {
 	// Build frames
 	frames := make([][]byte, len(packets))
 	for i, pkt := range packets {
-		frame, err := buildUDPPacket(s.localAddr, addrs[i], pkt)
+		dstMAC := s.resolveMAC(addrs[i].IP)
+		frame, err := buildUDPPacket(s.localAddr, addrs[i], pkt, s.srcMAC, dstMAC)
 		if err != nil {
 			s.log.Trace("failed to build packet", "index", i, "error", err)
 			continue
