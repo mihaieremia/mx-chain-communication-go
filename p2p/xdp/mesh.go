@@ -1,6 +1,7 @@
 package xdp
 
 import (
+	"math/rand"
 	"sync"
 
 	"github.com/multiversx/mx-chain-communication-go/p2p"
@@ -54,6 +55,12 @@ type Mesh struct {
 
 // NewMesh creates a new mesh manager
 func NewMesh(peerManager *peer.Manager, config MeshConfig, log p2p.Logger) *Mesh {
+	// Validate config: D must not exceed Dhi to prevent out-of-bounds slice on pruning
+	if config.D > config.Dhi {
+		log.Warn("mesh config invalid: D > Dhi, clamping D to Dhi", "D", config.D, "Dhi", config.Dhi)
+		config.D = config.Dhi
+	}
+
 	return &Mesh{
 		meshes:        make(map[string][]core.PeerID),
 		subscriptions: make(map[string]bool),
@@ -187,8 +194,9 @@ func (m *Mesh) UpdateMesh(topic string, connectedPeers []core.PeerID) {
 	}
 	mesh = validPeers
 
-	// Prune if too many
+	// Prune if too many — shuffle first to avoid systematic bias, then truncate
 	if len(mesh) > m.config.Dhi {
+		rand.Shuffle(len(mesh), func(i, j int) { mesh[i], mesh[j] = mesh[j], mesh[i] })
 		mesh = mesh[:m.config.D]
 	}
 

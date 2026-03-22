@@ -140,15 +140,22 @@ func (ch *CapabilityHandler) handleStream(s network.Stream) {
 
 	remotePeerID := s.Conn().RemotePeer()
 
-	// Read remote capability
+	// Read remote capability (accumulate reads since a single Read is not guaranteed to return all data)
 	buf := make([]byte, MaxCapabilityMessageSize)
-	n, err := s.Read(buf)
-	if err != nil && err != io.EOF {
-		ch.log.Trace("failed to read capability",
-			"peer", remotePeerID.String(),
-			"error", err,
-		)
-		return
+	var n int
+	for n < MaxCapabilityMessageSize {
+		nn, readErr := s.Read(buf[n:])
+		n += nn
+		if readErr == io.EOF || nn == 0 {
+			break
+		}
+		if readErr != nil {
+			ch.log.Trace("failed to read capability",
+				"peer", remotePeerID.String(),
+				"error", readErr,
+			)
+			return
+		}
 	}
 
 	remoteCap, err := DecodeCapability(buf[:n])
@@ -193,11 +200,18 @@ func (ch *CapabilityHandler) ExchangeCapability(ctx context.Context, peerID core
 		return nil, fmt.Errorf("failed to send capability: %w", err)
 	}
 
-	// Read remote capability
+	// Read remote capability (accumulate reads since a single Read is not guaranteed to return all data)
 	buf := make([]byte, MaxCapabilityMessageSize)
-	n, err := s.Read(buf)
-	if err != nil && err != io.EOF {
-		return nil, fmt.Errorf("failed to read capability: %w", err)
+	var n int
+	for n < MaxCapabilityMessageSize {
+		nn, readErr := s.Read(buf[n:])
+		n += nn
+		if readErr == io.EOF || nn == 0 {
+			break
+		}
+		if readErr != nil {
+			return nil, fmt.Errorf("failed to read capability: %w", readErr)
+		}
 	}
 
 	remoteCap, err := DecodeCapability(buf[:n])

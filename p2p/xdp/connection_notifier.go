@@ -99,6 +99,15 @@ func (cn *ConnectionNotifier) Disconnected(_ network.Network, conn network.Conn)
 
 // exchangeCapability performs the capability exchange with a peer
 func (cn *ConnectionNotifier) exchangeCapability(peerID core.PeerID) {
+	defer func() {
+		if r := recover(); r != nil {
+			cn.log.Warn("panic recovered in exchangeCapability",
+				"peerID", peerID.Pretty(),
+				"panic", r,
+			)
+		}
+	}()
+
 	// Acquire semaphore to limit concurrent exchanges
 	select {
 	case cn.exchangeSem <- struct{}{}:

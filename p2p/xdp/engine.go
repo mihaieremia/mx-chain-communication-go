@@ -142,6 +142,7 @@ func NewEngine(args EngineArgs) (*Engine, error) {
 		xdpConfig.Security.MaxSeqNoGap,
 	)
 	if err != nil {
+		e.sessionManager.Close()
 		socket.Close()
 		cancel()
 		return nil, fmt.Errorf("failed to create replay protector: %w", err)
@@ -151,6 +152,7 @@ func NewEngine(args EngineArgs) (*Engine, error) {
 	// Create peer manager
 	peerManager, err := peer.NewManager(peer.DefaultManagerConfig(), log)
 	if err != nil {
+		e.sessionManager.Close()
 		socket.Close()
 		cancel()
 		return nil, fmt.Errorf("failed to create peer manager: %w", err)
@@ -180,6 +182,7 @@ func NewEngine(args EngineArgs) (*Engine, error) {
 		log,
 	)
 	if err != nil {
+		e.sessionManager.Close()
 		socket.Close()
 		peerManager.Close()
 		cancel()
@@ -198,6 +201,7 @@ func NewEngine(args EngineArgs) (*Engine, error) {
 		log,
 	)
 	if err != nil {
+		e.sessionManager.Close()
 		sender.Close()
 		socket.Close()
 		peerManager.Close()
