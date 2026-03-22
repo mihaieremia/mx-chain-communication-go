@@ -194,17 +194,19 @@ func (r *Receiver) processPacket(received *receivedPacket) {
 		return
 	}
 
-	// Verify HMAC
+	// Verify HMAC using the trusted peerID resolved from the source address,
+	// not the attacker-controllable pkt.PeerID from the wire
 	hmacData := pkt.EncodeForHMAC()
-	if !r.authenticator.Verify(pkt.PeerID, hmacData, pkt.HMAC) {
+	if !r.authenticator.VerifyWithPeerID(peerID, hmacData, pkt.HMAC) {
 		r.authFailures.Add(1)
 		r.log.Trace("HMAC verification failed", "peer", peerID.Pretty())
 		return
 	}
 
-	// Check replay protection
+	// Check replay protection using a [32]byte derived from the trusted peerID
 	if r.replayProtector != nil {
-		if err := r.replayProtector.ValidateAndRecord(pkt.PeerID, pkt.SeqNo, pkt.Timestamp); err != nil {
+		trustedPeerIDBytes := peerIDToBytes(peerID)
+		if err := r.replayProtector.ValidateAndRecord(trustedPeerIDBytes, pkt.SeqNo, pkt.Timestamp); err != nil {
 			r.replayBlocked.Add(1)
 			r.log.Trace("replay protection blocked message", "error", err, "peer", peerID.Pretty())
 			return

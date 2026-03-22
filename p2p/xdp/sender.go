@@ -156,9 +156,14 @@ func (s *Sender) sendDirect(topic string, data []byte, peerID core.PeerID, addr 
 		pkt.MsgType = msgType
 		pkt.Flags |= flags
 
-		// Sign the packet
+		// Sign the packet using the full PeerID for correct session lookup
 		hmacData := pkt.EncodeForHMAC()
-		pkt.HMAC, _ = s.authenticator.Sign(peerIDBytes, hmacData)
+		hmac, signErr := s.authenticator.SignWithPeerID(peerID, hmacData)
+		if signErr != nil {
+			s.log.Trace("failed to sign packet", "error", signErr, "peer", peerID.Pretty())
+			return signErr
+		}
+		pkt.HMAC = hmac
 
 		// Encode and send
 		encoded, err := pkt.Encode()

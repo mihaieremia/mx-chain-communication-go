@@ -5,6 +5,8 @@ import (
 	"hash/fnv"
 	"sync"
 	"time"
+
+	"github.com/multiversx/mx-chain-core-go/core"
 )
 
 const (
@@ -99,6 +101,15 @@ func (p *Packet) SetPayload(data []byte) error {
 // SetPeerID sets the sender peer ID (truncated to 32 bytes)
 func (p *Packet) SetPeerID(peerID []byte) {
 	copy(p.PeerID[:], peerID)
+}
+
+// peerIDToBytes converts a core.PeerID to a [32]byte for use in packet-level
+// fields (wire format, replay protection keys). The PeerID is truncated to
+// 32 bytes to match the wire packet PeerID field size.
+func peerIDToBytes(peerID core.PeerID) [32]byte {
+	var b [32]byte
+	copy(b[:], []byte(peerID))
+	return b
 }
 
 // SetTopic sets the topic and computes the topic ID
