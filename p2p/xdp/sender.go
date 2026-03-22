@@ -18,8 +18,6 @@ var _ = fmt.Errorf
 
 // Sender handles XDP packet transmission
 type Sender struct {
-	mu sync.RWMutex
-
 	socket        *Socket
 	peerManager   *peer.Manager
 	fragmenter    *FragmentAssembler
@@ -38,9 +36,9 @@ type Sender struct {
 	wg        sync.WaitGroup
 	closeOnce sync.Once
 
-	// Stats
-	messagesSent    uint64
-	messagesDropped uint64
+	// Stats — atomic counters to avoid mutex on hot send path
+	messagesSent    atomic.Uint64
+	messagesDropped atomic.Uint64
 
 	log p2p.Logger
 }
@@ -179,9 +177,7 @@ func (s *Sender) sendDirect(topic string, data []byte, peerID core.PeerID, addr 
 		}
 	}
 
-	s.mu.Lock()
-	s.messagesSent++
-	s.mu.Unlock()
+	s.messagesSent.Add(1)
 
 	return nil
 }
@@ -206,9 +202,7 @@ func (s *Sender) SendAsync(topic string, data []byte, peerID core.PeerID) error 
 	case s.batchQueue <- req:
 		return nil
 	default:
-		s.mu.Lock()
-		s.messagesDropped++
-		s.mu.Unlock()
+		s.messagesDropped.Add(1)
 		return fmt.Errorf("send queue full")
 	}
 }
@@ -286,12 +280,9 @@ func (s *Sender) nextSeqNo(peerID core.PeerID) uint64 {
 
 // GetStats returns sender statistics
 func (s *Sender) GetStats() SenderStats {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	return SenderStats{
-		MessagesSent:    s.messagesSent,
-		MessagesDropped: s.messagesDropped,
+		MessagesSent:    s.messagesSent.Load(),
+		MessagesDropped: s.messagesDropped.Load(),
 		QueueLength:     len(s.batchQueue),
 	}
 }

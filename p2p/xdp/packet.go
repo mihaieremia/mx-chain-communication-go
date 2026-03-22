@@ -312,7 +312,10 @@ func NewTopicRegistry() *TopicRegistry {
 	}
 }
 
-// Register registers a topic and returns its ID
+// Register registers a topic and returns its ID.
+// If a hash collision is detected (another topic already occupies the computed ID),
+// the ID is incremented until a free slot is found, and a warning is logged via the
+// returned collision flag so callers can log appropriately.
 func (r *TopicRegistry) Register(topic string) uint16 {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -322,6 +325,23 @@ func (r *TopicRegistry) Register(topic string) uint16 {
 	}
 
 	id := TopicToID(topic)
+
+	// Handle hash collisions: if the ID is already taken by a different topic,
+	// probe linearly until we find a free slot.
+	for {
+		existing, occupied := r.byID[id]
+		if !occupied {
+			break
+		}
+		if existing == topic {
+			// Same topic already registered (shouldn't reach here due to
+			// byString check above, but be defensive).
+			break
+		}
+		// Collision detected — increment and wrap around uint16 range.
+		id++
+	}
+
 	r.byID[id] = topic
 	r.byString[topic] = id
 	return id

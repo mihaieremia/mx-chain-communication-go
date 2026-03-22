@@ -93,20 +93,3 @@ func (a *Authenticator) VerifyWithPeerID(peerID core.PeerID, packetData []byte, 
 	return VerifyPacket(key, packetData, expectedHMAC)
 }
 
-// Sign signs a packet for a specific peer using truncated peer ID bytes
-// NOTE: This method is provided for backward compatibility with packet format
-// where only 32 bytes of peer ID are transmitted. It internally converts
-// to core.PeerID for O(1) lookup. Returns error if no session found.
-func (a *Authenticator) Sign(peerIDBytes [32]byte, packetData []byte) ([32]byte, error) {
-	// Convert truncated peer ID bytes back to core.PeerID
-	// The PeerID is stored as the key in session manager
-	peerID := core.PeerID(peerIDBytes[:])
-	return a.SignWithPeerID(peerID, packetData)
-}
-
-// Verify verifies a packet HMAC from a specific peer using truncated peer ID bytes
-// NOTE: This method is provided for backward compatibility with packet format
-func (a *Authenticator) Verify(peerIDBytes [32]byte, packetData []byte, expectedHMAC [32]byte) bool {
-	peerID := core.PeerID(peerIDBytes[:])
-	return a.VerifyWithPeerID(peerID, packetData, expectedHMAC)
-}

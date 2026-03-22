@@ -290,54 +290,6 @@ func TestAuthenticator_VerifyWithPeerID_WrongSignature(t *testing.T) {
 	assert.False(t, valid)
 }
 
-func TestAuthenticator_Sign_TruncatedPeerID(t *testing.T) {
-	t.Parallel()
-
-	sm := NewSessionManager(time.Hour, time.Hour)
-	defer sm.Close()
-
-	// Create a truncated 32-byte peer ID
-	var peerIDBytes [32]byte
-	copy(peerIDBytes[:], "test-peer-truncated")
-
-	// The session manager uses the same truncated bytes as key
-	peerID := core.PeerID(peerIDBytes[:])
-	sharedKey := []byte("shared-key-for-truncated-test!!")
-	session := NewSession(peerID, sharedKey, "127.0.0.1:37374")
-	sm.AddSession(session)
-
-	auth := NewAuthenticator(sm)
-	packetData := []byte("packet data")
-
-	signature, err := auth.Sign(peerIDBytes, packetData)
-
-	require.NoError(t, err)
-	assert.Len(t, signature[:], HMACSize)
-}
-
-func TestAuthenticator_Verify_TruncatedPeerID(t *testing.T) {
-	t.Parallel()
-
-	sm := NewSessionManager(time.Hour, time.Hour)
-	defer sm.Close()
-
-	var peerIDBytes [32]byte
-	copy(peerIDBytes[:], "test-peer-truncated")
-
-	peerID := core.PeerID(peerIDBytes[:])
-	sharedKey := []byte("shared-key-for-verify-truncated!")
-	session := NewSession(peerID, sharedKey, "127.0.0.1:37374")
-	sm.AddSession(session)
-
-	auth := NewAuthenticator(sm)
-	packetData := []byte("packet data")
-	signature := SignPacket(sharedKey, packetData)
-
-	valid := auth.Verify(peerIDBytes, packetData, signature)
-
-	assert.True(t, valid)
-}
-
 func TestAuthenticator_SignAndVerify_Roundtrip(t *testing.T) {
 	t.Parallel()
 

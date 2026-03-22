@@ -2,6 +2,7 @@ package xdp
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/multiversx/mx-chain-communication-go/p2p"
 	"github.com/multiversx/mx-chain-communication-go/p2p/xdp/peer"
@@ -20,9 +21,9 @@ type Broadcaster struct {
 	// Fallback to libp2p for non-XDP peers
 	libp2pFallback LibP2PBroadcaster
 
-	// Stats
-	xdpBroadcasts    uint64
-	libp2pFallbacks  uint64
+	// Stats — atomic counters to avoid mutex on hot broadcast path
+	xdpBroadcasts   atomic.Uint64
+	libp2pFallbacks atomic.Uint64
 
 	log p2p.Logger
 }
@@ -96,9 +97,7 @@ func (b *Broadcaster) BroadcastOnChannel(channel string, topic string, data []by
 		if err := b.sender.Broadcast(topic, data, xdpPeers); err != nil {
 			b.log.Trace("XDP broadcast error", "topic", topic, "error", err)
 		} else {
-			b.mu.Lock()
-			b.xdpBroadcasts++
-			b.mu.Unlock()
+			b.xdpBroadcasts.Add(1)
 		}
 	}
 
@@ -110,9 +109,7 @@ func (b *Broadcaster) BroadcastOnChannel(channel string, topic string, data []by
 
 		if fallback != nil {
 			fallback.BroadcastOnChannel(channel, topic, data)
-			b.mu.Lock()
-			b.libp2pFallbacks++
-			b.mu.Unlock()
+			b.libp2pFallbacks.Add(1)
 		}
 	}
 }
@@ -167,12 +164,9 @@ func (b *Broadcaster) UpdateMesh(topic string, connectedPeers []core.PeerID) {
 
 // GetStats returns broadcaster statistics
 func (b *Broadcaster) GetStats() BroadcasterStats {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
 	return BroadcasterStats{
-		XDPBroadcasts:   b.xdpBroadcasts,
-		LibP2PFallbacks: b.libp2pFallbacks,
+		XDPBroadcasts:   b.xdpBroadcasts.Load(),
+		LibP2PFallbacks: b.libp2pFallbacks.Load(),
 		MeshStats:       b.mesh.GetStats(),
 	}
 }

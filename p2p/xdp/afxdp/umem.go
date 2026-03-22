@@ -109,21 +109,21 @@ func (u *UMEM) Register(sockFd int) error {
 	return nil
 }
 
-// AllocFrame allocates a free frame and returns its address
-// This is lock-free using atomic operations
+// AllocFrame allocates a free frame and returns its address.
+// Uses mutex for consistency with AllocFrames/FreeFrame/FreeFrames.
 func (u *UMEM) AllocFrame() (uint64, bool) {
-	for {
-		top := atomic.LoadInt64(&u.freeTop)
-		if top <= 0 {
-			return 0, false // No free frames
-		}
+	u.mu.Lock()
+	defer u.mu.Unlock()
 
-		newTop := top - 1
-		if atomic.CompareAndSwapInt64(&u.freeTop, top, newTop) {
-			return u.freeFrames[newTop], true
-		}
-		// CAS failed, retry
+	top := u.freeTop
+	if top <= 0 {
+		return 0, false // No free frames
 	}
+
+	newTop := top - 1
+	addr := u.freeFrames[newTop]
+	u.freeTop = newTop
+	return addr, true
 }
 
 // AllocFrames allocates multiple frames at once
@@ -131,7 +131,7 @@ func (u *UMEM) AllocFrames(count int) ([]uint64, int) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 
-	top := atomic.LoadInt64(&u.freeTop)
+	top := u.freeTop
 	available := int(top)
 	if available == 0 {
 		return nil, 0
@@ -148,30 +148,24 @@ func (u *UMEM) AllocFrames(count int) ([]uint64, int) {
 		frames[i] = u.freeFrames[newTop+int64(i)]
 	}
 
-	atomic.StoreInt64(&u.freeTop, newTop)
+	u.freeTop = newTop
 	return frames, count
 }
 
-// FreeFrame returns a frame to the free pool
+// FreeFrame returns a frame to the free pool.
+// Uses mutex for consistency with AllocFrame/AllocFrames/FreeFrames.
 func (u *UMEM) FreeFrame(addr uint64) bool {
-	for {
-		top := atomic.LoadInt64(&u.freeTop)
-		if top >= int64(u.numFrames) {
-			return false // Stack is full (shouldn't happen)
-		}
+	u.mu.Lock()
+	defer u.mu.Unlock()
 
-		// Write the frame address BEFORE the CAS so that a concurrent
-		// AllocFrame that sees the new freeTop will always find the
-		// address already in place. If the CAS fails, the write is
-		// harmless (it will be overwritten on the next successful CAS).
-		u.freeFrames[top] = addr
-
-		newTop := top + 1
-		if atomic.CompareAndSwapInt64(&u.freeTop, top, newTop) {
-			return true
-		}
-		// CAS failed, retry
+	top := u.freeTop
+	if top >= int64(u.numFrames) {
+		return false // Stack is full (shouldn't happen)
 	}
+
+	u.freeFrames[top] = addr
+	u.freeTop = top + 1
+	return true
 }
 
 // FreeFrames returns multiple frames to the free pool
@@ -179,7 +173,7 @@ func (u *UMEM) FreeFrames(addrs []uint64) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 
-	top := atomic.LoadInt64(&u.freeTop)
+	top := u.freeTop
 
 	for _, addr := range addrs {
 		if top >= int64(u.numFrames) {
@@ -189,7 +183,7 @@ func (u *UMEM) FreeFrames(addrs []uint64) {
 		top++
 	}
 
-	atomic.StoreInt64(&u.freeTop, top)
+	u.freeTop = top
 }
 
 // GetFrame returns a pointer to the frame data at the given address
@@ -244,7 +238,9 @@ func (u *UMEM) ReadFromFrame(addr uint64, length uint32) []byte {
 
 // FreeCount returns the number of free frames
 func (u *UMEM) FreeCount() int {
-	return int(atomic.LoadInt64(&u.freeTop))
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return int(u.freeTop)
 }
 
 // FrameSize returns the size of each frame

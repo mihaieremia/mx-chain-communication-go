@@ -7,7 +7,13 @@ import (
 	lru "github.com/hashicorp/golang-lru"
 )
 
-// ReplayProtector prevents replay attacks by tracking seen messages
+// ReplayProtector prevents replay attacks by tracking seen messages.
+//
+// TODO: The shared LRU cache across all peers means high-traffic peers can
+// evict entries for low-traffic peers, potentially allowing replays against
+// quiet peers. The correct long-term fix is a per-peer sliding-window bitmap
+// indexed by sequence number, which would give O(1) lookup and bounded memory
+// per peer regardless of traffic distribution.
 type ReplayProtector struct {
 	mu sync.RWMutex
 

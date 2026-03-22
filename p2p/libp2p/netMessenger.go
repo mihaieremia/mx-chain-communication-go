@@ -600,9 +600,10 @@ func (netMes *networkMessenger) Close() error {
 
 	var err error
 
-	// Close XDP connection notifier first (before engine)
+	// Unregister and close XDP connection notifier first (before engine)
 	if netMes.xdpConnectionNotifier != nil {
-		netMes.log.Debug("closing network messenger's XDP connection notifier...")
+		netMes.log.Debug("unregistering and closing network messenger's XDP connection notifier...")
+		netMes.p2pHost.Network().StopNotify(netMes.xdpConnectionNotifier)
 		errNotifier := netMes.xdpConnectionNotifier.Close()
 		if errNotifier != nil {
 			err = errNotifier
