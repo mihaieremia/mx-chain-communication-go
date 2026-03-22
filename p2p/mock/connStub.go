@@ -131,3 +131,8 @@ func (cs *ConnStub) IsClosed() bool {
 
 	return false
 }
+
+// As -
+func (cs *ConnStub) As(_ any) bool {
+	return false
+}
