@@ -23,6 +23,7 @@ import (
 	metricsFactory "github.com/multiversx/mx-chain-communication-go/p2p/libp2p/metrics/factory"
 	"github.com/multiversx/mx-chain-communication-go/p2p/libp2p/networksharding/factory"
 	"github.com/multiversx/mx-chain-communication-go/p2p/libp2p/resourceLimiter"
+	"github.com/multiversx/mx-chain-communication-go/p2p/xdp"
 	"github.com/multiversx/mx-chain-core-go/core"
 	"github.com/multiversx/mx-chain-core-go/core/check"
 	"github.com/multiversx/mx-chain-core-go/core/throttler"
@@ -81,6 +82,10 @@ type networkMessenger struct {
 	printConnectionsWatcher p2p.ConnectionsWatcher
 	networkType             p2p.NetworkType
 	log                     p2p.Logger
+
+	// XDP high-performance networking
+	xdpEngine              *xdp.Engine
+	xdpConnectionNotifier  *xdp.ConnectionNotifier
 }
 
 // ArgsNetworkMessenger defines the options used to create a p2p wrapper
@@ -415,6 +420,49 @@ func addComponentsToNode(
 		return err
 	}
 
+	// Initialize XDP engine for high-performance networking
+	xdpArgs := xdp.EngineArgs{
+		Config:     args.P2pConfig.XDP,
+		Host:       p2pNode.p2pHost,
+		Marshaller: marshaller,
+		Logger:     p2pNode.log,
+	}
+	p2pNode.xdpEngine, err = xdp.NewEngine(xdpArgs)
+	if err != nil {
+		p2pNode.log.Warn("failed to create XDP engine, continuing without XDP",
+			"error", err)
+		// Don't return error - XDP is optional, continue without it
+	} else if p2pNode.xdpEngine.IsEnabled() {
+		// Set up XDP message handler to forward received messages
+		p2pNode.xdpEngine.SetMessageHandler(func(topic string, data []byte, peerID core.PeerID) {
+			// Forward XDP messages to the standard message processor
+			if msgHandler, ok := p2pNode.MessageHandler.(*messagesHandler); ok {
+				msgHandler.ProcessReceivedXDPMessage(topic, data, peerID)
+			}
+		})
+
+		// Set up libp2p fallbacks for XDP router
+		if msgHandler, ok := p2pNode.MessageHandler.(*messagesHandler); ok {
+			p2pNode.xdpEngine.SetLibP2PFallbacks(
+				msgHandler, // implements LibP2PDirectSender
+				msgHandler, // implements LibP2PBroadcaster
+			)
+		}
+
+		// Create and register connection notifier for automatic XDP capability exchange
+		p2pNode.xdpConnectionNotifier = xdp.NewConnectionNotifier(p2pNode.xdpEngine, p2pNode.log)
+		p2pNode.p2pHost.Network().Notify(p2pNode.xdpConnectionNotifier)
+		p2pNode.log.Debug("XDP connection notifier registered for automatic capability exchange")
+
+		// Start XDP engine
+		if startErr := p2pNode.xdpEngine.Start(); startErr != nil {
+			p2pNode.log.Warn("failed to start XDP engine",
+				"error", startErr)
+		} else {
+			p2pNode.log.Info("XDP engine started successfully")
+		}
+	}
+
 	p2pNode.printLogs()
 
 	return nil
@@ -531,6 +579,31 @@ func (netMes *networkMessenger) Close() error {
 	netMes.log.Debug("closing network messenger's host...")
 
 	var err error
+
+	// Close XDP connection notifier first (before engine)
+	if netMes.xdpConnectionNotifier != nil {
+		netMes.log.Debug("closing network messenger's XDP connection notifier...")
+		errNotifier := netMes.xdpConnectionNotifier.Close()
+		if errNotifier != nil {
+			err = errNotifier
+			netMes.log.Warn("networkMessenger.Close",
+				"component", "xdpConnectionNotifier",
+				"error", err)
+		}
+	}
+
+	// Close XDP engine (if enabled)
+	if netMes.xdpEngine != nil {
+		netMes.log.Debug("closing network messenger's XDP engine...")
+		errXDP := netMes.xdpEngine.Close()
+		if errXDP != nil {
+			err = errXDP
+			netMes.log.Warn("networkMessenger.Close",
+				"component", "xdpEngine",
+				"error", err)
+		}
+	}
+
 	netMes.log.Debug("closing network messenger's messages handler...")
 	errMH := netMes.MessageHandler.Close()
 	if errMH != nil {
@@ -600,4 +673,14 @@ func (netMes *networkMessenger) Port() int {
 // IsInterfaceNil returns true if there is no value under the interface
 func (netMes *networkMessenger) IsInterfaceNil() bool {
 	return netMes == nil
+}
+
+// GetXDPEngine returns the XDP engine (may be nil if XDP is not enabled)
+func (netMes *networkMessenger) GetXDPEngine() *xdp.Engine {
+	return netMes.xdpEngine
+}
+
+// IsXDPEnabled returns true if XDP is enabled and running
+func (netMes *networkMessenger) IsXDPEnabled() bool {
+	return netMes.xdpEngine != nil && netMes.xdpEngine.IsEnabled()
 }

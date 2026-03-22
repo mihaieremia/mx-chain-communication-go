@@ -5,6 +5,7 @@ type P2PConfig struct {
 	Node                NodeConfig
 	KadDhtPeerDiscovery KadDhtPeerDiscoveryConfig
 	Sharding            ShardingConfig
+	XDP                 XDPConfig
 }
 
 // NodeConfig will hold basic p2p settings
@@ -66,4 +67,21 @@ type ShardingConfig struct {
 	MaxCrossShardObservers  uint32
 	MaxSeeders              uint32
 	Type                    string
+}
+
+// XDPConfig will hold XDP (eXpress Data Path) settings for high-performance networking
+type XDPConfig struct {
+	Enabled   bool
+	Port      uint16
+	Interface string
+	QueueSize uint32
+	BatchSize uint32
+	Security  XDPSecurityConfig
+}
+
+// XDPSecurityConfig holds XDP security settings
+type XDPSecurityConfig struct {
+	KeyRotationIntervalSec uint32
+	ReplayWindowSize       int
+	TimestampToleranceSec  uint32
 }

@@ -7,6 +7,7 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/websocket v1.5.3
+	github.com/hashicorp/golang-lru v1.0.2
 	github.com/ipfs/go-log v1.0.5
 	github.com/jbenet/goprocess v0.1.4
 	github.com/libp2p/go-libp2p v0.38.2
@@ -20,6 +21,7 @@ require (
 	github.com/multiversx/mx-chain-storage-go v1.1.0
 	github.com/stretchr/testify v1.10.0
 	github.com/whyrusleeping/timecache v0.0.0-20160911033111-cfcb2f1abfee
+	golang.org/x/crypto v0.32.0
 )
 
 require (
@@ -45,7 +47,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/huin/goupnp v1.3.0 // indirect
 	github.com/ipfs/boxo v0.27.4 // indirect
@@ -132,7 +133,6 @@ require (
 	go.uber.org/mock v0.5.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
-	golang.org/x/crypto v0.32.0 // indirect
 	golang.org/x/exp v0.0.0-20250128182459-e0ece0dbea4c // indirect
 	golang.org/x/mod v0.22.0 // indirect
 	golang.org/x/net v0.34.0 // indirect

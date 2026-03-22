@@ -636,6 +636,80 @@ func (handler *messagesHandler) increaseRatingIfNeeded(msg p2p.MessageP2P, fromC
 	}
 }
 
+// ProcessReceivedXDPMessage processes a message received via XDP high-performance path
+// This method converts the raw XDP message into the standard message format and processes it
+func (handler *messagesHandler) ProcessReceivedXDPMessage(topic string, data []byte, fromPeerID core.PeerID) {
+	handler.mutTopics.RLock()
+	topicProcs := handler.processors[topic]
+	handler.mutTopics.RUnlock()
+
+	if topicProcs == nil {
+		handler.log.Trace("received XDP message for unregistered topic",
+			"topic", topic,
+			"from", p2p.PeerIdToShortString(fromPeerID))
+		return
+	}
+
+	// Create a message from the XDP data
+	// The data should already be in TopicMessage format (created by sender)
+	msg, err := handler.createXDPMessage(topic, data, fromPeerID)
+	if err != nil {
+		handler.log.Trace("failed to create message from XDP data",
+			"topic", topic,
+			"error", err)
+		return
+	}
+
+	// Validate message timestamp
+	err = handler.checkMessage(msg, fromPeerID, topic)
+	if err != nil {
+		handler.log.Trace("XDP message validation failed",
+			"topic", topic,
+			"error", err)
+		return
+	}
+
+	// Process through all registered processors
+	identifiers, msgProcessors := topicProcs.GetList()
+	messageOk := true
+	for index, msgProc := range msgProcessors {
+		_, errProcess := msgProc.ProcessReceivedMessage(msg, fromPeerID, handler)
+		if errProcess != nil {
+			handler.log.Trace("XDP message processor error",
+				"error", errProcess.Error(),
+				"topic", topic,
+				"from", p2p.PeerIdToShortString(fromPeerID),
+				"identifier", identifiers[index])
+			messageOk = false
+		}
+	}
+
+	handler.mutDebugger.RLock()
+	handler.debugger.AddIncomingMessage(topic, uint64(len(data)), !messageOk)
+	handler.mutDebugger.RUnlock()
+
+	if messageOk {
+		handler.peersRatingHandler.IncreaseRating(fromPeerID)
+	}
+}
+
+// createXDPMessage creates a p2p.MessageP2P from XDP received data
+func (handler *messagesHandler) createXDPMessage(topic string, data []byte, fromPeerID core.PeerID) (p2p.MessageP2P, error) {
+	// Create a pubsub-compatible message structure
+	pubSubMsg := &pubsub.Message{
+		Message: &pubsubPb.Message{
+			From:      fromPeerID.Bytes(),
+			Data:      data,
+			Seqno:     handler.directSender.NextSequenceNumber(),
+			Topic:     &topic,
+			Signature: fromPeerID.Bytes(),
+		},
+	}
+
+	// Use the existing NewMessage constructor which handles unmarshalling
+	return NewMessage(pubSubMsg, handler.marshaller, p2p.Direct)
+}
+
 func (handler *messagesHandler) createMessageBytes(buff []byte) []byte {
 	message := &data.TopicMessage{
 		Version:   currentTopicMessageVersion,
