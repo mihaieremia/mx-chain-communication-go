@@ -443,7 +443,7 @@ func addComponentsToNode(
 	// Initialize XDP engine for high-performance networking
 	xdpArgs := xdp.EngineArgs{
 		Config:     args.P2pConfig.Node.Transports.XDP,
-		Port:       uint16(p2pNode.port),
+		Port:       uint16(p2pNode.port) + 1000, // XDP uses a separate port offset from libp2p
 		Host:       p2pNode.p2pHost,
 		Marshaller: marshaller,
 		Logger:     p2pNode.log,
